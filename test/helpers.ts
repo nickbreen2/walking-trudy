@@ -18,7 +18,7 @@ export class FakeApi implements BotApi {
 
 export const GROUP = -100123;
 
-export function makeTestDeps(opts: { now: string; walkers?: string } ) {
+export function makeTestDeps(opts: { now: string; threshold?: number }) {
   const store = new MemoryStore();
   const api = new FakeApi();
   let now = new Date(opts.now);
@@ -29,7 +29,7 @@ export function makeTestDeps(opts: { now: string; walkers?: string } ) {
     config: loadConfig({
       GROUP_CHAT_ID: String(GROUP),
       TOPIC_ID: "7",
-      WALKERS: opts.walkers ?? "@nick,@andres,@michael,@matt",
+      TAGGING_THRESHOLD: String(opts.threshold ?? 10),
       TIMEZONE: "America/Los_Angeles",
     }),
     now: () => now,
@@ -39,6 +39,10 @@ export function makeTestDeps(opts: { now: string; walkers?: string } ) {
     },
   };
   return { deps, store, api, setNow: (iso: string) => (now = new Date(iso)) };
+}
+
+export function person(i: number) {
+  return { id: 1000 + i, first_name: `Person${i}`, username: `person${i}` };
 }
 
 export function groupMessage(text: string, extra: Record<string, unknown> = {}) {

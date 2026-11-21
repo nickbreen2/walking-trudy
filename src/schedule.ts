@@ -3,34 +3,38 @@
 // The cron fires every 15 minutes; a slot is sent on the first tick at or after
 // hour:minute within that hour, once per day. `when` makes it conditional.
 
-export type SlotId =
-  | "walk_ask"
-  | "walk_nudge"
-  | "walk_desperate"
-  | "walk_sos"
-  | "food_water_midday"
-  | "food_water_evening"
-  | "crate_ask"
-  | "crate_nudge";
-
-export type Condition = "not_walked" | "not_caged";
+export type SlotKind = "walk" | "food_water" | "crate_ask" | "crate_nudge";
+export type Condition = "not_walked_recently" | "not_caged";
 
 export interface Slot {
-  id: SlotId;
+  id: string;
+  kind: SlotKind;
   hour: number;
   minute?: number;
   when?: Condition;
 }
 
+/** Walk reminders every 2 hours, 7am through 9pm (last call). */
+export const WALK_HOURS = [7, 9, 11, 13, 15, 17, 19, 21];
+export const FIRST_WALK_HOUR = WALK_HOURS[0]!;
+export const LAST_WALK_HOUR = WALK_HOURS[WALK_HOURS.length - 1]!;
+
+/** A walk reminder is skipped if Trudy was walked within this many minutes. */
+export const RECENT_WALK_MINUTES = 120;
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
 export const SCHEDULE: Slot[] = [
-  { id: "walk_ask", hour: 7, when: "not_walked" }, // tag today's walker
-  { id: "walk_nudge", hour: 9, when: "not_walked" }, // "Still waiting on my walk"
-  { id: "walk_desperate", hour: 11, when: "not_walked" }, // tag walker + a backup
-  { id: "walk_sos", hour: 13, when: "not_walked" }, // last-ditch, no new tags
-  { id: "food_water_midday", hour: 12 }, // no response needed
-  { id: "food_water_evening", hour: 18 }, // no response needed
-  { id: "crate_ask", hour: 22, when: "not_caged" },
-  { id: "crate_nudge", hour: 23, when: "not_caged" },
+  ...WALK_HOURS.map((hour) => ({
+    id: `walk_${pad(hour)}`,
+    kind: "walk" as const,
+    hour,
+    when: "not_walked_recently" as const,
+  })),
+  { id: "food_water_12", kind: "food_water", hour: 12 }, // no response needed
+  { id: "food_water_18", kind: "food_water", hour: 18 }, // no response needed
+  { id: "crate_ask", kind: "crate_ask", hour: 22, when: "not_caged" },
+  { id: "crate_nudge", kind: "crate_nudge", hour: 23, when: "not_caged" },
 ];
 
 export function dueSlots(hour: number, minute: number, schedule: Slot[] = SCHEDULE): Slot[] {

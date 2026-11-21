@@ -14,8 +14,9 @@ TIMEZONE = "America/Los_Angeles"
 # Fill these in after adding the bot to the group (use /chatid in the group).
 GROUP_CHAT_ID = ""
 TOPIC_ID = ""
-# Comma-separated Relay @usernames who can be tagged for walks, e.g. "@nick,@andres"
-WALKERS = ""
+# Nobody is tagged until this many different people have used /walked.
+# After that, only people who have used /walked (and not sent /notag) are tagged.
+TAGGING_THRESHOLD = "10"
 # Relay often sends commands privately to the bot. Accept them and announce in the group.
 ALLOW_DM_COMMANDS = "true"
 # Days Trudy's schedule runs (Mon,Tue,Wed,Thu,Fri,Sat,Sun).

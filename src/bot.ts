@@ -5,18 +5,22 @@ import {
   CAGED,
   FED,
   HELP,
+  NOTAG,
   POTTY_LOGGED,
   POTTY_QUESTION,
+  TAGGING_ON,
+  TAGME,
   escapeHtml,
+  otherMessage,
   parsePotty,
   pottyFromCode,
   pottyLabel,
-  slotMessage,
+  walkMessage,
   type PottyCode,
 } from "./messages";
 import type { BotApi } from "./relay";
 import { pickFromBag } from "./rotation";
-import { SCHEDULE, dueSlots, type Slot } from "./schedule";
+import { FIRST_WALK_HOUR, LAST_WALK_HOUR, RECENT_WALK_MINUTES, SCHEDULE, dueSlots, type Slot } from "./schedule";
 import type { Store, WalkRow } from "./store";
 import type { CallbackQuery, Chat, InlineKeyboardButton, Message, Update, User } from "./types";
 
@@ -29,7 +33,8 @@ export interface Deps {
 }
 
 const BAG_KEY = "rotation_bag";
-const LAST_ASSIGNEE_KEY = "last_assignee";
+const LAST_TAGGED_KEY = "last_tagged";
+const TAGGING_ANNOUNCED_KEY = "tagging_announced";
 
 // ---------- helpers ----------
 
@@ -130,6 +135,9 @@ export async function handleUpdate(update: Update, d: Deps): Promise<void> {
     case "food":
     case "water":
       return handleFed(msg, d);
+    case "notag":
+    case "tagme":
+      return handleTagPref(msg, cmd.name === "tagme", d);
     case "status":
     case "today":
       await replyTo(d, msg, await statusText(d));
@@ -157,10 +165,38 @@ async function handleWalked(msg: Message, args: string, d: Deps) {
 
   if (potty) {
     await announce(d, POTTY_LOGGED(name, pottyLabel(potty.pee, potty.poo)));
-    return;
+  } else {
+    const sent = await announce(d, POTTY_QUESTION(name), { reply_markup: pottyKeyboard(id) });
+    if (sent) await d.store.setWalkPrompt(id, sent.message_id);
   }
-  const sent = await announce(d, POTTY_QUESTION(name), { reply_markup: pottyKeyboard(id) });
-  if (sent) await d.store.setWalkPrompt(id, sent.message_id);
+
+  // Remember who walks Trudy. Tagging switches on once enough different people have.
+  if (msg.from) {
+    const isNew = await d.store.recordWalker(walkerInfo(msg.from), d.now().toISOString());
+    if (isNew) await maybeAnnounceTagging(d);
+  }
+}
+
+function walkerInfo(u: User) {
+  return { userId: u.id, username: u.username?.replace(/^@/, "") || null, firstName: displayName(u) };
+}
+
+async function taggingEnabled(d: Deps): Promise<boolean> {
+  return (await d.store.walkerCount()) >= d.config.taggingThreshold;
+}
+
+async function maybeAnnounceTagging(d: Deps) {
+  if (await d.store.getMeta(TAGGING_ANNOUNCED_KEY)) return;
+  const n = await d.store.walkerCount();
+  if (n < d.config.taggingThreshold) return;
+  await d.store.setMeta(TAGGING_ANNOUNCED_KEY, d.now().toISOString());
+  await announce(d, TAGGING_ON(n));
+}
+
+async function handleTagPref(msg: Message, allow: boolean, d: Deps) {
+  if (!msg.from) return;
+  await d.store.setOptOut(walkerInfo(msg.from), !allow, d.now().toISOString());
+  await replyTo(d, msg, allow ? TAGME(displayName(msg.from)) : NOTAG(displayName(msg.from)));
 }
 
 async function handlePottyReply(msg: Message, d: Deps) {
@@ -243,47 +279,61 @@ export async function statusText(d: Deps): Promise<string> {
     `🥣 Food &amp; water: ${day?.fed_at ? `checked by ${escapeHtml(day.fed_by ?? "someone")} at ${formatTime(day.fed_at, tz)}` : "not confirmed"}`,
     `💤 Crate: ${day?.caged_at ? `tucked in by ${escapeHtml(day.caged_by ?? "someone")} at ${formatTime(day.caged_at, tz)}` : "not yet"}`,
   ];
-  if (day?.assignee) {
-    lines.push(`🙋 On walk duty: ${escapeHtml(day.assignee)}${day.backup ? ` (backup ${escapeHtml(day.backup)})` : ""}`);
-  }
+  const n = await d.store.walkerCount();
+  lines.push(
+    n >= d.config.taggingThreshold
+      ? `🏷️ Tagging: on (${n} people have walked me)`
+      : `🏷️ Tagging: off until ${d.config.taggingThreshold} people have walked me (${n} so far)`,
+  );
   return lines.join("\n");
 }
 
 // ---------- scheduled messages ----------
 
-async function nextWalker(d: Deps, avoid: string[]): Promise<string | null> {
+/** Pick the next person to tag, fairly, from people who have walked Trudy. */
+async function nextToTag(d: Deps): Promise<string | null> {
+  if (!(await taggingEnabled(d))) return null;
+  const pool = await d.store.taggableWalkers();
   const bag = JSON.parse((await d.store.getMeta(BAG_KEY)) ?? "[]") as string[];
-  const { pick, bag: rest } = pickFromBag(bag, d.config.walkers, d.random, avoid);
+  const last = await d.store.getMeta(LAST_TAGGED_KEY);
+  const { pick, bag: rest } = pickFromBag(bag, pool, d.random, last ? [last] : []);
   await d.store.setMeta(BAG_KEY, JSON.stringify(rest));
+  if (pick) await d.store.setMeta(LAST_TAGGED_KEY, pick);
   return pick;
 }
 
 async function conditionHolds(slot: Slot, date: string, d: Deps): Promise<boolean> {
-  if (slot.when === "not_walked") return (await d.store.walksOn(date)).length === 0;
+  if (slot.when === "not_walked_recently") {
+    const last = await d.store.lastWalk();
+    if (!last) return true;
+    const minutes = (d.now().getTime() - new Date(last.walked_at).getTime()) / 60_000;
+    return minutes >= RECENT_WALK_MINUTES;
+  }
   if (slot.when === "not_caged") return !(await d.store.getDay(date))?.caged_at;
   return true;
 }
 
-/** Send one slot's message right now (assigning walkers as needed). */
+/** Send one slot's message right now. */
 export async function fireSlot(slot: Slot, date: string, d: Deps): Promise<void> {
-  const day = await d.store.getDay(date);
-  let assignee = day?.assignee ?? null;
-  let backup = day?.backup ?? null;
-
-  if (slot.id === "walk_ask" && !assignee) {
-    const last = await d.store.getMeta(LAST_ASSIGNEE_KEY);
-    assignee = await nextWalker(d, last ? [last] : []);
-    if (assignee) {
-      await d.store.updateDay(date, { assignee });
-      await d.store.setMeta(LAST_ASSIGNEE_KEY, assignee);
-    }
+  if (slot.kind !== "walk") {
+    await announce(d, otherMessage(slot.kind, d.random));
+    return;
   }
-  if (slot.id === "walk_desperate" && !backup && d.config.walkers.length > 1) {
-    backup = await nextWalker(d, assignee ? [assignee] : []);
-    if (backup) await d.store.updateDay(date, { backup });
-  }
-
-  await announce(d, slotMessage(slot.id, { assignee, backup }, d.random));
+  const walks = await d.store.walksOn(date);
+  const latest = walks[walks.length - 1];
+  const tagged = await nextToTag(d);
+  const text = walkMessage(
+    {
+      isFirst: slot.hour === FIRST_WALK_HOUR,
+      isLast: slot.hour === LAST_WALK_HOUR,
+      walkedToday: walks.length > 0,
+      hoursWaiting: slot.hour - FIRST_WALK_HOUR,
+      lastWalk: latest ? { name: latest.walker_name, time: formatTime(latest.walked_at, d.config.timezone) } : null,
+      tags: tagged ? [tagged] : [],
+    },
+    d.random,
+  );
+  await announce(d, text);
 }
 
 /** Called by the cron every 15 minutes. */

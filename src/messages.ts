@@ -1,7 +1,7 @@
 // Everything Trudy says. Each message has a few variants so she doesn't sound
 // like a robot; one is picked at random. All text is sent with parse_mode=HTML.
 
-import type { SlotId } from "./schedule";
+import type { SlotKind } from "./schedule";
 
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -11,60 +11,79 @@ export function pickOne<T>(items: readonly T[], random: () => number): T {
   return items[Math.floor(random() * items.length)] ?? items[0]!;
 }
 
-export interface SlotContext {
-  assignee: string | null; // "@username"
-  backup: string | null;
+export interface WalkContext {
+  isFirst: boolean; // 7am
+  isLast: boolean; // 9pm last call
+  walkedToday: boolean;
+  hoursWaiting: number; // hours since the first reminder, if not walked today
+  lastWalk: { name: string; time: string } | null; // today's most recent walk
+  tags: string[]; // "@username"s to tag (empty until tagging is switched on)
 }
 
-const tag = (t: string | null) => (t ? escapeHtml(t) : "");
+const SIGN_OFF = "Type /walked when we're back.";
 
-const SLOT_MESSAGES: Record<SlotId, (c: SlotContext) => string[]> = {
-  walk_ask: (c) => {
-    const who = c.assignee
-      ? `${tag(c.assignee)}, you're my walker today! 🙏`
-      : "Anyone? 🙏";
+function walkLines(c: WalkContext): string[] {
+  const last = c.lastWalk ? ` Last walk was ${escapeHtml(c.lastWalk.name)} at ${c.lastWalk.time}.` : "";
+  if (c.isLast) {
+    return c.walkedToday
+      ? [
+          `Last call for a walk tonight! 🌙🐾${last}`,
+          `One more stroll before bed? 🌙 Last walk request of the day!${last}`,
+        ]
+      : [
+          `Last call! 🌙 I haven't been out at all today and I really need to go 😰`,
+          `🚨 Final walk request of the day 🚨 Nobody's taken me out yet! 🥺`,
+        ];
+  }
+  if (c.walkedToday) {
     return [
-      `Good morning! 🐶☀️ Can someone walk me?\n${who}\n\nType /walked when we're back.`,
-      `Rise and shine! 🐕 My legs are ready. Who's walking me?\n${who}\n\nType /walked when we're back.`,
-      `Hey hey! 🐾 Walk time? Pretty please?\n${who}\n\nType /walked when we're back.`,
+      `Walk time again? 🐾${last}`,
+      `Hey! Could someone take me out for a quick walk? 🐕${last}`,
+      `Potty break please? 🌳🐶${last}`,
     ];
-  },
-  walk_nudge: (c) => [
-    `Still waiting on my walk... 🥺 ${tag(c.assignee)}`.trim(),
-    `Hellooo? Still no walk 👀🐶 ${tag(c.assignee)}`.trim(),
-    `Just sitting by the door. Patiently. Mostly. 🚪🐕 ${tag(c.assignee)}`.trim(),
-  ],
-  walk_desperate: (c) => {
-    const tags = [c.assignee, c.backup].filter(Boolean).map((t) => tag(t)).join(" ");
+  }
+  if (c.isFirst) {
     return [
-      `Getting more desperate here, I need to go to the bathroom 😰 ${tags}`.trim(),
-      `Okay this is getting serious. Bathroom. Now. Please. 😣🚽 ${tags}`.trim(),
+      `Good morning! 🐶☀️ Can someone walk me?`,
+      `Rise and shine! 🐕 My legs are ready. Who's walking me?`,
+      `Hey hey! 🐾 Morning walk? Pretty please?`,
     ];
-  },
-  walk_sos: () => [
-    `🚨 SOS 🚨 Still no walk and it's afternoon. Anyone in the office? My legs are crossed 🥴`,
-    `🚨 Code yellow 🚨 It's been a whole morning. Whoever sees this first, please take me out! 🐶`,
-  ],
-  food_water_midday: () => [
+  }
+  if (c.hoursWaiting <= 2) {
+    return [
+      `Still waiting on my walk... 🥺`,
+      `Hellooo? Still no walk 👀🐶`,
+      `Just sitting by the door. Patiently. Mostly. 🚪🐕`,
+    ];
+  }
+  return [
+    `Getting more desperate here, I need to go to the bathroom 😰`,
+    `Okay this is getting serious. Bathroom. Please. 😣🚽`,
+    `I've been holding it ALL day. Somebody? Anybody? 🥴`,
+  ];
+}
+
+export function walkMessage(c: WalkContext, random: () => number): string {
+  let text = pickOne(walkLines(c), random);
+  if (c.tags.length) text += `\n${c.tags.map(escapeHtml).join(" ")} can you help? 🙏`;
+  return `${text}\n\n${SIGN_OFF}`;
+}
+
+const OTHER: Record<Exclude<SlotKind, "walk">, string[]> = {
+  food_water: [
     `Hey can someone make sure I have enough water and food to survive? 🥣💧`,
     `Quick bowl check? 🥣💧 A girl's gotta stay hydrated.`,
+    `Is my water bowl full? Asking for a thirsty corgi 💧🐶`,
   ],
-  food_water_evening: () => [
-    `Evening bowl check! 🌇 Food and water topped up? 🥣💧`,
-    `Is it dinner o'clock? 🍽️🐶 Someone check my food and water please!`,
-  ],
-  crate_ask: () => [
+  crate_ask: [
     `Can someone take me to my crate? I'm getting tired here 😴\nType /caged when I'm tucked in.`,
     `Yawn... 🥱 Bedtime. Who's tucking me in?\nType /caged when I'm in my crate.`,
   ],
-  crate_nudge: () => [
-    `Still up... 🥱🌙 Someone take me to my crate? /caged`,
-    `It's past my bedtime 😪 Crate please! /caged`,
-  ],
+  crate_nudge: [`Still up... 🥱🌙 Someone take me to my crate? /caged`, `It's past my bedtime 😪 Crate please! /caged`],
 };
 
-export function slotMessage(id: SlotId, ctx: SlotContext, random: () => number): string {
-  return pickOne(SLOT_MESSAGES[id](ctx), random);
+export function otherMessage(kind: Exclude<SlotKind, "walk">, random: () => number): string {
+  return pickOne(OTHER[kind], random);
 }
 
 // ---------- Potty ----------
@@ -110,12 +129,20 @@ export const ALREADY_CAGED = (by: string) =>
 export const FED = (name: string) =>
   `Thanks ${escapeHtml(name)}! My bowls and I are grateful 🥣💧❤️`;
 
+export const TAGGING_ON = (n: number) =>
+  `🎉 ${n} different people have walked me! From now on I'll tag one of my walkers when I need to go out.\nDon't want to be tagged? Send /notag (and /tagme to opt back in).`;
+
+export const NOTAG = (name: string) => `Got it ${escapeHtml(name)}, I won't tag you. 🤐 Send /tagme if you change your mind.`;
+export const TAGME = (name: string) => `Yay ${escapeHtml(name)}! 🐾 I may tag you when I need a walk. Send /notag to stop.`;
+
 export const HELP = `🐶 <b>I'm Trudy!</b> Here's how to take care of me:
 
 /walked — you walked me (I'll ask if I went pee or poo). Add it inline too: <code>/walked both</code>
 /caged — I'm in my crate for the night
 /fed — you checked my food and water
 /status — what's happened today
+/notag — never tag me · /tagme — ok to tag me
 /help — this message
 
-I'll post at 7am asking for a walk and nudge at 9 and 11 if nobody's taken me out. Bedtime ask is at 10pm.`;
+I ask for a walk every 2 hours from 7am to 9pm (I skip it if I was walked in the last 2 hours). Bedtime ask is at 10pm.
+I don't tag anyone until 10 different people have walked me, and then only people who have used /walked.`;

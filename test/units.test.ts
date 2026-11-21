@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseCommand } from "../src/bot";
 import { localClock } from "../src/clock";
-import { parseWalkers } from "../src/config";
 import { parsePotty } from "../src/messages";
 import { pickFromBag } from "../src/rotation";
 import { dueSlots } from "../src/schedule";
@@ -43,12 +42,6 @@ describe("parsePotty", () => {
   it("returns null for unrelated text", () => expect(parsePotty("great walk")).toBeNull());
 });
 
-describe("parseWalkers", () => {
-  it("normalizes and dedupes", () => {
-    expect(parseWalkers("nick, @andres @@matt,nick")).toEqual(["@nick", "@andres", "@matt"]);
-  });
-});
-
 describe("rotation", () => {
   it("picks everyone once before repeating, never back to back", () => {
     const walkers = ["@a", "@b", "@c", "@d"];
@@ -77,9 +70,12 @@ describe("rotation", () => {
 });
 
 describe("dueSlots", () => {
-  it("returns the 7am ask at 7:00 and 7:45", () => {
-    expect(dueSlots(7, 0).map((s) => s.id)).toEqual(["walk_ask"]);
-    expect(dueSlots(7, 45).map((s) => s.id)).toEqual(["walk_ask"]);
+  it("walk reminders every 2 hours from 7am to 9pm, none after", () => {
+    const walkHours = Array.from({ length: 24 }, (_, h) => h).filter((h) =>
+      dueSlots(h, 0).some((s) => s.kind === "walk"),
+    );
+    expect(walkHours).toEqual([7, 9, 11, 13, 15, 17, 19, 21]);
+    expect(dueSlots(7, 45).map((s) => s.id)).toEqual(["walk_07"]);
     expect(dueSlots(8, 0)).toEqual([]);
   });
 });

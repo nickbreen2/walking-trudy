@@ -21,6 +21,22 @@ export interface WalkRow {
   prompt_message_id: number | null;
 }
 
+export interface WalkerRow {
+  user_id: number;
+  username: string | null;
+  first_name: string;
+  first_walked_at: string;
+  last_walked_at: string;
+  walk_count: number;
+  opted_out: number;
+}
+
+export interface WalkerInfo {
+  userId: number;
+  username: string | null;
+  firstName: string;
+}
+
 export type DayPatch = Partial<Omit<DayRow, "date">>;
 
 export interface NewWalk {
@@ -46,6 +62,15 @@ export interface Store {
   releaseSlot(date: string, slot: string): Promise<void>;
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;
+  /** Most recent walk ever (across days). */
+  lastWalk(): Promise<WalkRow | null>;
+  /** Record that this person walked Trudy. Returns true if it's their first walk ever. */
+  recordWalker(w: WalkerInfo, at: string): Promise<boolean>;
+  /** Number of different people who have walked Trudy. */
+  walkerCount(): Promise<number>;
+  /** "@username" of walkers who can be tagged (have a username, not opted out). */
+  taggableWalkers(): Promise<string[]>;
+  setOptOut(w: WalkerInfo, optedOut: boolean, at: string): Promise<void>;
 }
 
 const DAY_COLUMNS = ["assignee", "backup", "fed_by", "fed_at", "caged_by", "caged_at"] as const;
@@ -129,6 +154,56 @@ export class D1Store implements Store {
       .bind(key, value)
       .run();
   }
+
+  async lastWalk() {
+    return (await this.db.prepare("SELECT * FROM walks ORDER BY walked_at DESC LIMIT 1").first<WalkRow>()) ?? null;
+  }
+
+  async recordWalker(w: WalkerInfo, at: string) {
+    const prev = await this.db
+      .prepare("SELECT walk_count FROM walkers WHERE user_id = ?")
+      .bind(w.userId)
+      .first<{ walk_count: number }>();
+    await this.db
+      .prepare(
+        `INSERT INTO walkers (user_id, username, first_name, first_walked_at, last_walked_at, walk_count)
+         VALUES (?, ?, ?, ?, ?, 1)
+         ON CONFLICT(user_id) DO UPDATE SET
+           username = excluded.username,
+           first_name = excluded.first_name,
+           first_walked_at = CASE WHEN walkers.walk_count = 0 THEN excluded.first_walked_at ELSE walkers.first_walked_at END,
+           last_walked_at = excluded.last_walked_at,
+           walk_count = walkers.walk_count + 1`,
+      )
+      .bind(w.userId, w.username, w.firstName, at, at)
+      .run();
+    return !prev || prev.walk_count === 0;
+  }
+
+  async walkerCount() {
+    const row = await this.db.prepare("SELECT COUNT(*) AS n FROM walkers WHERE walk_count > 0").first<{ n: number }>();
+    return Number(row?.n ?? 0);
+  }
+
+  async taggableWalkers() {
+    const res = await this.db
+      .prepare(
+        "SELECT username FROM walkers WHERE walk_count > 0 AND opted_out = 0 AND username IS NOT NULL AND username != '' ORDER BY first_walked_at",
+      )
+      .all<{ username: string }>();
+    return (res.results ?? []).map((r) => "@" + r.username);
+  }
+
+  async setOptOut(w: WalkerInfo, optedOut: boolean, at: string) {
+    await this.db
+      .prepare(
+        `INSERT INTO walkers (user_id, username, first_name, first_walked_at, last_walked_at, walk_count, opted_out)
+         VALUES (?, ?, ?, ?, ?, 0, ?)
+         ON CONFLICT(user_id) DO UPDATE SET opted_out = excluded.opted_out, username = excluded.username`,
+      )
+      .bind(w.userId, w.username, w.firstName, at, at, optedOut ? 1 : 0)
+      .run();
+  }
 }
 
 export class MemoryStore implements Store {
@@ -136,6 +211,7 @@ export class MemoryStore implements Store {
   walks: WalkRow[] = [];
   slots = new Set<string>();
   meta = new Map<string, string>();
+  walkers = new Map<number, WalkerRow>();
 
   async getDay(date: string) {
     return this.days.get(date) ?? null;
@@ -197,5 +273,43 @@ export class MemoryStore implements Store {
   }
   async setMeta(key: string, value: string) {
     this.meta.set(key, value);
+  }
+  async lastWalk() {
+    return [...this.walks].sort((a, b) => b.walked_at.localeCompare(a.walked_at))[0] ?? null;
+  }
+  async recordWalker(w: WalkerInfo, at: string) {
+    const cur = this.walkers.get(w.userId);
+    const isNew = !cur || cur.walk_count === 0;
+    this.walkers.set(w.userId, {
+      user_id: w.userId,
+      username: w.username,
+      first_name: w.firstName,
+      first_walked_at: isNew ? at : cur!.first_walked_at,
+      last_walked_at: at,
+      walk_count: (cur?.walk_count ?? 0) + 1,
+      opted_out: cur?.opted_out ?? 0,
+    });
+    return isNew;
+  }
+  async walkerCount() {
+    return [...this.walkers.values()].filter((w) => w.walk_count > 0).length;
+  }
+  async taggableWalkers() {
+    return [...this.walkers.values()]
+      .filter((w) => w.walk_count > 0 && !w.opted_out && w.username)
+      .sort((a, b) => a.first_walked_at.localeCompare(b.first_walked_at))
+      .map((w) => "@" + w.username);
+  }
+  async setOptOut(w: WalkerInfo, optedOut: boolean, at: string) {
+    const cur = this.walkers.get(w.userId);
+    this.walkers.set(w.userId, {
+      user_id: w.userId,
+      username: w.username,
+      first_name: w.firstName,
+      first_walked_at: cur?.first_walked_at ?? at,
+      last_walked_at: cur?.last_walked_at ?? at,
+      walk_count: cur?.walk_count ?? 0,
+      opted_out: optedOut ? 1 : 0,
+    });
   }
 }
