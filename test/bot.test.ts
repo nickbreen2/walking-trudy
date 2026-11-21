@@ -242,3 +242,14 @@ describe("/status", () => {
     expect(s).toContain("Tagging: off until 10 people have walked me (1 so far)");
   });
 });
+
+describe("DOG_NAME", () => {
+  it("uses the configured dog's name in /help and /status", async () => {
+    const { deps, api } = makeTestDeps({ now: at(8) });
+    deps.config.dogName = "Biscuit";
+    await handleUpdate(groupMessage("/help"), deps);
+    expect(api.sent().at(-1)).toContain("I'm Biscuit!");
+    await handleUpdate(groupMessage("/status"), deps);
+    expect(api.sent().at(-1)).toContain("Biscuit's day");
+  });
+});

@@ -10,6 +10,9 @@ crons = ["*/15 * * * *"]
 [vars]
 # Corgi Relay Bot API address (from "Moving a Telegram Bot to Corgi Relay").
 TELEGRAM_API_URL = "https://d1hbrzkrx7d3gv.cloudfront.net"
+# The office dog's name. Trudy uses it in /help, /status and the command menu.
+DOG_NAME = "Trudy"
+# Your office's time zone (IANA name), e.g. America/New_York, Europe/London.
 TIMEZONE = "America/Los_Angeles"
 # Fill these in after adding the bot to the group (use /chatid in the group).
 GROUP_CHAT_ID = "-1000000000082"

@@ -20,6 +20,7 @@ Telegram-style bot for **Corgi Relay** (Telegram Bot API clone) that manages Tru
 - Limits: text 4096 chars, callback_data 64 bytes.
 
 ## Conventions
+- This repo is a template for any office dog: the dog's name comes from `DOG_NAME` (never hard-code "Trudy" in user-facing text), the time zone from `TIMEZONE`. Per-office values live only in `wrangler.toml`.
 - All user-facing text lives in `src/messages.ts`, sent with `parse_mode: "HTML"` — always `escapeHtml` user-supplied names.
 - Timetable lives in `src/schedule.ts`; times are local (`TIMEZONE`, default America/Los_Angeles). Cron is `*/15 * * * *` UTC.
 - Business logic in `src/bot.ts` takes a `Deps` object (store, api, config, now, random) so it is testable; keep Cloudflare specifics in `src/index.ts`.

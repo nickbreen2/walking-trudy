@@ -6,14 +6,14 @@ import { findSlot } from "./schedule";
 import { D1Store } from "./store";
 import type { Update } from "./types";
 
-export const BOT_COMMANDS = [
-  { command: "walked", description: "I walked Trudy" },
-  { command: "caged", description: "Trudy is in her crate for the night" },
-  { command: "fed", description: "I checked Trudy's food and water" },
+export const botCommands = (dog: string) => [
+  { command: "walked", description: `I walked ${dog}` },
+  { command: "caged", description: `${dog} is in the crate for the night` },
+  { command: "fed", description: `I checked ${dog}'s food and water` },
   { command: "status", description: "What happened today" },
-  { command: "join", description: "OK to tag me when Trudy needs a walk" },
+  { command: "join", description: `OK to tag me when ${dog} needs a walk` },
   { command: "leave", description: "Never tag me for walks" },
-  { command: "help", description: "How Trudy works" },
+  { command: "help", description: `How ${dog} works` },
 ];
 
 function makeDeps(env: Env): Deps {
@@ -57,7 +57,7 @@ async function handleAdmin(req: Request, env: Env, url: URL): Promise<Response> 
         secret_token: env.WEBHOOK_SECRET,
         allowed_updates: ["message", "callback_query"],
       });
-      await d.api.call("setMyCommands", { commands: BOT_COMMANDS });
+      await d.api.call("setMyCommands", { commands: botCommands(d.config.dogName) });
       const info = await d.api.call("getWebhookInfo");
       return json({ ok: true, me, webhook: info });
     }
@@ -104,7 +104,7 @@ export default {
       }
     }
 
-    if (url.pathname === "/") return new Response("Trudy is awake 🐶");
+    if (url.pathname === "/") return new Response(`${loadConfig(env).dogName} is awake 🐶`);
     return new Response("not found", { status: 404 });
   },
 

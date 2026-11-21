@@ -1,4 +1,4 @@
-// Everything Trudy says. Each message has a few variants so she doesn't sound
+// Everything the dog says (the name comes from DOG_NAME). Each message has a few variants so she doesn't sound
 // like a robot; one is picked at random. All text is sent with parse_mode=HTML.
 
 import type { SlotKind } from "./schedule";
@@ -72,7 +72,7 @@ export function walkMessage(c: WalkContext, random: () => number): string {
 const OTHER: Record<Exclude<SlotKind, "walk">, string[]> = {
   food_water: [
     `Hey can someone make sure I have enough water and food to survive? 🥣💧`,
-    `Quick bowl check? 🥣💧 A girl's gotta stay hydrated.`,
+    `Quick bowl check? 🥣💧 A pup's gotta stay hydrated.`,
     `Is my water bowl full? Asking for a thirsty corgi 💧🐶`,
   ],
   crate_ask: [
@@ -136,7 +136,7 @@ export const JOINED = (name: string) =>
   `Yay ${escapeHtml(name)}! 🐾 You're on my walk crew. Once tagging is on, I may tag you when I need to go out. Send /leave to stop.`;
 export const LEFT = (name: string) => `Got it ${escapeHtml(name)}, I won't tag you. 🤐 Send /join if you change your mind.`;
 
-export const HELP = `🐶 <b>I'm Trudy!</b> Here's how to take care of me:
+export const helpText = (dogName: string) => `🐶 <b>I'm ${escapeHtml(dogName)}!</b> Here's how to take care of me:
 
 /walked — you walked me (I'll ask if I went pee or poo). Add it inline too: <code>/walked both</code>
 /caged — I'm in my crate for the night

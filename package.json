@@ -9,8 +9,8 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "db:migrate:local": "wrangler d1 migrations apply walking-trudy --local",
-    "db:migrate:remote": "wrangler d1 migrations apply walking-trudy --remote",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "tail": "wrangler tail"
   },
   "devDependencies": {

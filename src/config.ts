@@ -7,6 +7,7 @@ export interface Env {
   GROUP_CHAT_ID?: string;
   TOPIC_ID?: string;
   TAGGING_THRESHOLD?: string;
+  DOG_NAME?: string;
   TIMEZONE?: string;
   ALLOW_DM_COMMANDS?: string;
   ACTIVE_DAYS?: string;
@@ -17,6 +18,7 @@ export interface Config {
   topicId: number | null;
   /** Tagging turns on once this many different people have used /walked. */
   taggingThreshold: number;
+  dogName: string; // the office dog this bot speaks as
   timezone: string;
   allowDmCommands: boolean;
   activeDays: string[]; // "Mon".."Sun"
@@ -39,6 +41,7 @@ export function loadConfig(env: Partial<Env>): Config {
     groupChatId: toInt(env.GROUP_CHAT_ID),
     topicId: toInt(env.TOPIC_ID),
     taggingThreshold: toInt(env.TAGGING_THRESHOLD) ?? 10,
+    dogName: env.DOG_NAME?.trim() || "Trudy",
     timezone: env.TIMEZONE?.trim() || "America/Los_Angeles",
     allowDmCommands: (env.ALLOW_DM_COMMANDS ?? "true").trim().toLowerCase() !== "false",
     activeDays: days.length ? days : ALL_DAYS,

@@ -4,7 +4,7 @@ import {
   ALREADY_CAGED,
   CAGED,
   FED,
-  HELP,
+  helpText,
   POTTY_LOGGED,
   POTTY_QUESTION,
   TAGGING_ON,
@@ -158,7 +158,7 @@ export async function handleUpdate(update: Update, d: Deps): Promise<void> {
       return;
     case "help":
     case "start":
-      await replyTo(d, msg, HELP);
+      await replyTo(d, msg, helpText(d.config.dogName));
       return;
     default:
       return;
@@ -293,7 +293,7 @@ export async function statusText(d: Deps): Promise<string> {
     : ["  • none yet 🥺"];
 
   const lines = [
-    `📋 <b>Trudy's day — ${pretty}</b>`,
+    `📋 <b>${escapeHtml(d.config.dogName)}'s day — ${pretty}</b>`,
     `🐾 Walks:`,
     ...walkLines,
     `🥣 Food &amp; water: ${day?.fed_at ? `checked by ${escapeHtml(day.fed_by ?? "someone")} at ${formatTime(day.fed_at, tz)}` : "not confirmed"}`,

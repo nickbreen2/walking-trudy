@@ -1,151 +1,242 @@
-# walking_trudy 🐶
+# Office Dog Bot 🐶
 
-Trudy is the Corgi SF office dog. This bot lives in her Corgi Relay chat. It asks for walks, tags a random person each morning, logs pee and poo, reminds people about food and water, and asks for her crate at night.
+A Corgi Relay bot that looks after an office dog. It asks the office to walk the dog every couple of hours, logs pee and poo, reminds people about food and water, and asks for the crate at night.
 
-It runs on **Cloudflare Workers (free tier)** and stores state in **Cloudflare D1** (free SQLite). Corgi Relay speaks the Telegram Bot API, so the bot calls `https://d1hbrzkrx7d3gv.cloudfront.net/bot<TOKEN>/<method>` instead of Telegram.
+It started as **Trudy** (`@walking_trudy_bot`) for the SF office. **Want one for your office's dog? Follow [Make a bot for your office dog](#make-a-bot-for-your-office-dog) below.** It takes about 30 minutes and costs nothing.
 
-## How Trudy's day works (Pacific time)
+- Runs on **Cloudflare Workers + D1**, on the free tier: no server to keep up, and it never sleeps.
+- Talks to **Corgi Relay** through its Telegram-compatible Bot API.
+- Everything is set in `wrangler.toml`: dog name, time zone, chat. You don't have to touch the code.
 
-| Time | Message | Condition |
+---
+
+## What the bot does
+
+### Daily schedule (in your office's time zone)
+
+| Time | Message | When it's skipped |
 |---|---|---|
-| 7am, 9am, 11am, 1pm, 3pm, 5pm, 7pm, **9pm (last call)** | Walk reminder | Skipped if she was walked in the last 2 hours |
-| 12:00pm, 6:00pm | "Hey can someone make sure I have enough water and food to survive? 🥣💧" | Always, no reply needed |
-| 10:00pm | "Can someone take me to my crate? I'm getting tired here 😴" | Skipped if already caged |
-| 11:00pm | "Still up... 🥱 Someone take me to my crate?" | Only if nobody `/caged` |
+| 7am, 9am, 11am, 1pm, 3pm, 5pm, 7pm, **9pm (last call)** | Walk reminder | If the dog was walked in the last 2 hours |
+| 12pm, 6pm | "Hey can someone make sure I have enough water and food to survive? 🥣💧" | Never (no reply needed) |
+| 10pm | "Can someone take me to my crate? I'm getting tired here 😴" | If someone already sent `/caged` |
+| 11pm | "Still up... 🥱 Someone take me to my crate?" | If someone already sent `/caged` |
 
-The walk reminder's wording depends on the day so far:
+The walk reminder changes with the day: "Good morning! Can someone walk me?" at 7am, then "Still waiting on my walk 🥺", then "Getting more desperate here, I need to go to the bathroom 😰" if nobody has walked them. Once someone has, it becomes "Walk time again? Last walk was Nick at 8:14 AM."
 
-- **7am, not walked yet:** "Good morning! 🐶 Can someone walk me?"
-- **9am, still not walked:** "Still waiting on my walk... 🥺"
-- **11am or later, still not walked:** "Getting more desperate here, I need to go to the bathroom 😰"
-- **Already walked today:** "Walk time again? 🐾 Last walk was Nick at 8:14 AM."
-- **9pm:** "Last call for a walk tonight! 🌙"
+### Commands
 
-Commands:
+| Command | What happens |
+|---|---|
+| `/walked` | "Thanks {name}! 🐾 Did I go pee or poo? The people need to know." with **💧 Pee / 💩 Poo / 💧💩 Both / 🙅 Neither** buttons. Anyone can tap. `/walked both` or replying "just pee" also works. |
+| `/caged` | "Thank you {name}! 😴 Goodnight, see you all tomorrow ❤️" |
+| `/fed` | Logs that someone checked food and water |
+| `/status` | Today's walks, potty results, food, crate and tagging progress |
+| `/join` / `/leave` | OK to tag me / never tag me |
+| `/chatid` | Shows the chat and topic id (used during setup) |
+| `/help` | How the bot works |
 
-- `/walked`: Trudy replies "Thanks {name}! 🐾 Did I go pee or poo? The people need to know." with buttons **💧 Pee / 💩 Poo / 💧💩 Both / 🙅 Neither**. Anyone can tap one. Replying to that message with "both", "just pee" and so on also works, as does `/walked both`.
-- `/caged`: "Thank you {name}! 😴 Goodnight, see you all tomorrow ❤️"
-- `/fed`: optional, logs that someone checked her food and water.
-- `/status`: today's walks, potty results, food, crate and tagging progress.
-- `/join` / `/leave`: opt in to being tagged, or never be tagged.
-- `/chatid`: prints the chat and topic ids (for setup).
-- `/help`
+### Tagging is opt-in
 
-Each message has a few variants, so she doesn't repeat the exact same line every day. Edit them in `src/messages.ts`. Change the timing in `src/schedule.ts` (`WALK_HOURS`, `RECENT_WALK_MINUTES`).
+People only get tagged once they've shown they're up for it:
 
-### Tagging (opt-in by walking)
+- **Nobody is tagged at first.** Each `/walked` saves who walked the dog.
+- **Tagging turns on after 10 different people have used `/walked`** (`TAGGING_THRESHOLD`). The bot announces it once.
+- **Only people who used `/walked` or `/join` get tagged.** Anyone can send `/leave` to never be tagged.
+- **One person is tagged per reminder.** Everyone gets a turn before anyone repeats, and nobody is tagged twice in a row.
 
-- **Nobody is tagged at first.** Every `/walked` saves the walker's Relay user id and @username.
-- **When the 10th different person uses `/walked`, tagging switches on.** Trudy announces it once in the group and explains `/leave`. Change the threshold with `TAGGING_THRESHOLD`.
-- **Only people who have used `/walked` or `/join` are ever tagged.** `/join` adds someone to the pool without walking her, but only walks count toward the 10. Anyone who sends `/leave` (even before they've walked her) is never tagged, and people with no @username are skipped.
-- **Each walk reminder tags one person.** Picks are random but fair: everyone is tagged once before anyone repeats, and nobody is tagged twice in a row.
+---
 
-### Design notes
+## Make a bot for your office dog
 
-- **A "Trudy day" runs 4am–4am.** A `/caged` at 12:30am still counts for the night before.
-- **DST-proof.** The cron runs every 15 minutes in UTC, and the code converts to Pacific time itself. If a send fails, the next tick in the same hour retries it.
-- **Relay limits respected.** The bot only uses `sendMessage`, `editMessageText`, `editMessageReplyMarkup`, `answerCallbackQuery`, `setWebhook`, `setMyCommands`, `getMe` and `getWebhookInfo`. `editMessageReplyMarkup` only clears the pee/poo buttons, and if it fails the error is logged and ignored. Relay can't list group members, which is another reason tagging is built from who has used `/walked`.
-- **Relay often sends commands privately to the bot.** With `ALLOW_DM_COMMANDS=true`, a privately-sent `/walked` still counts, and Trudy announces it in the group.
-- **Webhook, not polling.** Relay POSTs each update to `https://walking-trudy.<you>.workers.dev/webhook`. The request is verified with the `X-Telegram-Bot-Api-Secret-Token` header.
+You'll need:
 
-### Why Cloudflare Workers
+- A **Relay** account that can add members to your office's dog chat.
+- A **GitHub** account.
+- A free **Cloudflare** account: sign up at [dash.cloudflare.com](https://dash.cloudflare.com/sign-up).
+- **Node.js 20+** on your computer. Check with `node -v`.
 
-| Option | Free? | Problem |
-|---|---|---|
-| **Cloudflare Workers + D1** ✅ | Yes (100k requests/day, 5GB D1) | Nothing: it never sleeps, has a public HTTPS URL for the webhook, and has built-in cron |
-| Render free | Yes | Spins down after 15 min idle; cron is a paid feature |
-| Railway / Fly.io | No longer free | — |
-| GitHub Actions cron | Yes | Cron is delayed 5–30+ min and can't receive `/walked` in real time |
+> **Using Claude Code?** Open your copy of the repo and ask it to walk you through this section step by step. It reads `CLAUDE.md` for the Relay details. Do the logins and secrets yourself in a normal terminal (steps 3 and 5), so tokens never end up in the chat.
 
-The bot uses 96 cron runs a day plus a handful of webhooks, which is far below the free limits.
+### 1. Get your own copy
 
-## Setup
+On GitHub, open this repo and click **Use this template → Create a new repository** (or **Fork**). Name it after your dog, e.g. `walking-biscuit`. Then:
 
-### 1. Create the bot in Relay
+```bash
+git clone https://github.com/<you>/walking-biscuit.git
+cd walking-biscuit
+npm install
+```
 
-In Relay, open **Corgi Bot Studio** from the account that should own the bot long term:
+### 2. Create the bot in Relay
+
+In Relay, open a chat with **Corgi Bot Studio**. Do this from the account that should own the bot long term, because Relay can't transfer bots yet.
 
 ```
 /newbot
-  display name: Trudy 🐶
-  username:     walking_trudy_bot      (must end in "bot", can't be changed later)
+  display name: Biscuit 🐶
+  username:     walking_biscuit_bot    ← must end in "bot" and can't be changed later
 /setjoingroups  → allow
-/setprivacy     → disable   (so text replies to "pee or poo?" reach the bot; commands work either way)
+/setprivacy     → disable              ← so replies like "just pee" reach the bot
 ```
 
-Copy the token. Don't paste it in chat or git.
+Bot Studio replies with a **token**. Save it in your password manager, delete it from the Bot Studio chat, and never paste it into a chat or commit it.
 
-### 2. Deploy to Cloudflare
+### 3. Log in to Cloudflare
+
+Run this in a **regular terminal** (VS Code: Terminal → New Terminal), not in an AI chat panel, because the login needs to stay open while you approve it in the browser:
 
 ```bash
-npm install
-npx wrangler login
+npx wrangler login     # click "Allow" in the browser, wait for "Successfully logged in"
+npx wrangler whoami    # should show your email
+```
 
-# Create the database and paste the printed database_id into wrangler.toml
-npx wrangler d1 create walking-trudy
+### 4. Configure and deploy
+
+Edit `wrangler.toml`:
+
+```toml
+name = "walking-biscuit"                    # your Worker's name, also its URL
+...
+DOG_NAME = "Biscuit"
+TIMEZONE = "America/New_York"               # your office's time zone (IANA name)
+GROUP_CHAT_ID = ""                          # leave empty for now, filled in at step 7
+TOPIC_ID = ""
+...
+[[d1_databases]]
+binding = "DB"                              # keep as "DB"
+database_name = "walking-biscuit"
+database_id = "…"                           # from the next command
+```
+
+Then create the database, set up its tables and deploy:
+
+```bash
+npx wrangler d1 create walking-biscuit     # copy the database_id it prints into wrangler.toml
 npm run db:migrate:remote
-
-# Secrets
-npx wrangler secret put TELEGRAM_BOT_TOKEN     # from Corgi Bot Studio
-npx wrangler secret put WEBHOOK_SECRET         # e.g. `openssl rand -hex 32`
-npx wrangler secret put ADMIN_SECRET           # e.g. `openssl rand -hex 32`
-
-npm run deploy
+npm run deploy                              # prints your https://walking-biscuit.<subdomain>.workers.dev URL
 ```
 
-### 3. Register the webhook
+The first time you deploy, Cloudflare may ask you to pick a `workers.dev` subdomain, and the new URL can take a few minutes to start answering. If the very first deploy says "This Worker does not exist", run `npm run deploy` again.
+
+### 5. Set the secrets (in your terminal)
 
 ```bash
-curl -X POST https://walking-trudy.<your-subdomain>.workers.dev/admin/setup \
+npx wrangler secret put TELEGRAM_BOT_TOKEN                  # paste the token from step 2
+openssl rand -hex 32 | npx wrangler secret put WEBHOOK_SECRET
+
+ADMIN_SECRET=$(openssl rand -hex 32)
+echo $ADMIN_SECRET                                          # save this in your password manager
+echo "$ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET
+```
+
+### 6. Connect the bot to Relay
+
+In the same terminal (so `$ADMIN_SECRET` is still set), with your Worker URL:
+
+```bash
+curl https://walking-biscuit.<subdomain>.workers.dev/        # → "Biscuit is awake 🐶"
+curl -X POST https://walking-biscuit.<subdomain>.workers.dev/admin/setup \
   -H "Authorization: Bearer $ADMIN_SECRET"
 ```
 
-This calls `getMe`, `setWebhook` (with the secret) and `setMyCommands`. The response should show `ok: true` and your bot.
+You should see `"ok": true`, your bot's username, and a webhook URL ending in `/webhook`.
 
-### 4. Add Trudy to the group and configure
+### 7. Add the bot to your dog's chat
 
-1. Group Info → Add Members → `@walking_trudy_bot`.
-2. In the Trudy chat (or topic), send `/chatid`. Trudy replies with the chat id (negative) and the topic id, if any.
-3. Fill in `wrangler.toml`:
+1. In Relay, open the chat (Group Info → **Add Members**) and add `@walking_biscuit_bot`.
+2. Send `/chatid` in the chat, or in the topic if the dog lives in a topic. The bot replies with:
+   - `chat id`, a negative number like `-1000000000123`
+   - `chat type`, which should be `group` or `supergroup`. If it says `private`, Relay sent your command privately; try again from the group's message box.
+   - `topic id`, only shown if you're in a topic
+3. Copy the numbers from Relay (don't retype them) into `wrangler.toml`:
    ```toml
-   GROUP_CHAT_ID = "-100..."
-   TOPIC_ID = ""            # only if Trudy lives in a topic
-   TAGGING_THRESHOLD = "10" # tagging starts after this many different walkers
+   GROUP_CHAT_ID = "-1000000000123"
+   TOPIC_ID = "134"     # or "" if there's no topic
    ```
-4. `npm run deploy` again.
+4. `npm run deploy`, then commit and push.
 
-### 5. Test
+### 8. Check it works
+
+Send `/help` in the chat. If the bot replies, you're live. 🎉 The schedule starts on its own at the next reminder time, so nothing else needs switching on.
+
+Want to see a scheduled message right away?
 
 ```bash
-# See the config and current Pacific time as the bot sees it
-curl -X POST .../admin/config -H "Authorization: Bearer $ADMIN_SECRET"
-
-# Send the 7am walk reminder right now
-curl -X POST ".../admin/fire?slot=walk_07" -H "Authorization: Bearer $ADMIN_SECRET"
+curl -X POST "https://walking-biscuit.<subdomain>.workers.dev/admin/fire?slot=walk_07" \
+  -H "Authorization: Bearer $ADMIN_SECRET"
 ```
 
-Then try `/walked`, tap a button, then `/status` and `/caged`. Use `npm run tail` to watch live logs for `401`, `409` or `400` errors (see the Relay guide's troubleshooting table).
+This posts that one message now and doesn't change the schedule. Then try `/walked`, tap a button, and send `/status`.
+
+---
+
+## Customizing
+
+| What | Where |
+|---|---|
+| Dog's name | `DOG_NAME` in `wrangler.toml` |
+| Time zone | `TIMEZONE` in `wrangler.toml` |
+| Days the schedule runs (e.g. weekdays only) | `ACTIVE_DAYS = "Mon,Tue,Wed,Thu,Fri"` in `wrangler.toml` |
+| How many walkers before tagging starts | `TAGGING_THRESHOLD` in `wrangler.toml` |
+| Walk reminder times, food times, crate time | `src/schedule.ts` (`WALK_HOURS`, `RECENT_WALK_MINUTES`, `SCHEDULE`) |
+| Everything the dog says | `src/messages.ts`. Each message has a few variants, picked at random |
+
+After any change: `npm test`, then `npm run deploy`.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Bot doesn't reply at all | Run `npm run tail` and send a command. If nothing shows up, run step 6 again. |
+| `401` / `ACCESS_TOKEN_INVALID` | Wrong token. Run `npx wrangler secret put TELEGRAM_BOT_TOKEN` again. |
+| `400 CHAT_WRITE_FORBIDDEN` | The bot isn't in the chat, or `GROUP_CHAT_ID` is wrong. |
+| `MESSAGE_THREAD_NOT_FOUND` | Wrong `TOPIC_ID`. Send `/chatid` in the topic again. |
+| Commands are ignored | The command came from a different chat than `GROUP_CHAT_ID`. Check with `/chatid`. |
+| Can't add the bot to the group | In Corgi Bot Studio, run `/setjoingroups` and allow it. |
+| `wrangler login` never finishes | Run it in a normal terminal and keep it open until it says you're logged in. |
+| Token leaked | In Corgi Bot Studio, run `/revoke`, then set the new one with `wrangler secret put`. |
+
+## How it works
+
+- **Cloudflare Workers** runs the bot. Relay sends every message to `/webhook`, and the bot checks the `X-Telegram-Bot-Api-Secret-Token` header so only Relay can call it. A cron runs every 15 minutes and sends any message that's due.
+- **Time zones and daylight saving** are handled in code: the cron runs in UTC and the bot converts to `TIMEZONE`. If a send fails, the next tick in that hour retries it.
+- **A dog's day runs 4am to 4am**, so a `/caged` at 12:30am counts for the night before.
+- **Cloudflare D1** stores walks, who walked, the crate and food log, and who has opted in or out of tagging.
+- **Relay limits:** Relay supports a subset of the Telegram Bot API. The bot only uses `sendMessage`, `editMessageText`, `editMessageReplyMarkup`, `answerCallbackQuery`, `setWebhook`, `getWebhookInfo`, `setMyCommands` and `getMe`. Relay can't list group members, which is why the tagging list is built from `/walked` and `/join`.
+- **Cost:** about 96 cron runs a day plus a few webhooks, far below the free limits (100k requests a day).
+
+### Admin endpoints
+
+All of these are `POST` with `Authorization: Bearer $ADMIN_SECRET`:
+
+| Endpoint | What it does |
+|---|---|
+| `/admin/setup` | Registers the webhook and command menu with Relay |
+| `/admin/config` | Shows the bot's settings and current local time |
+| `/admin/fire?slot=<id>` | Sends one scheduled message now |
+| `/admin/tick` | Runs the scheduler as if the cron just fired |
 
 Slot ids: `walk_07`, `walk_09`, `walk_11`, `walk_13`, `walk_15`, `walk_17`, `walk_19`, `walk_21`, `food_water_12`, `food_water_18`, `crate_ask`, `crate_nudge`.
 
 ## Development
 
 ```bash
-npm test          # vitest: schedule, rotation, DST, full walk/crate flows with an in-memory store
+npm test           # schedule, tagging, time zones, full walk and crate flows (no Cloudflare needed)
 npm run typecheck
-npm run dev       # local worker; trigger cron with: curl "http://localhost:8787/__scheduled?cron=*/15+*+*+*+*"
+npm run dev        # local Worker; trigger the cron with: curl "http://localhost:8787/__scheduled?cron=*/15+*+*+*+*"
+npm run tail       # live logs from the deployed Worker
 ```
-
-## Layout
 
 ```
 src/index.ts     Worker entry: /webhook, /admin/*, cron
-src/bot.ts       Command handling + scheduler logic
-src/schedule.ts  Trudy's daily timetable  ← edit times here
-src/messages.ts  Everything Trudy says    ← edit copy here
-src/rotation.ts  Fair random tagging (pool = people who used /walked)
-src/clock.ts     Pacific time + "Trudy day" math
+src/bot.ts       Commands and scheduler logic
+src/schedule.ts  The daily timetable        ← edit times here
+src/messages.ts  Everything the dog says    ← edit wording here
+src/rotation.ts  Fair random tagging
+src/clock.ts     Time zone and "dog day" math
 src/store.ts     D1 storage (+ in-memory store for tests)
 src/relay.ts     Bot API client pointed at Relay
-migrations/      D1 schema
+migrations/      Database tables
 ```
+
+Made with ❤️ for Trudy, the Corgi SF office dog.
