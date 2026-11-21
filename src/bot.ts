@@ -93,6 +93,20 @@ function pottyKeyboard(walkId: number): { inline_keyboard: InlineKeyboardButton[
   };
 }
 
+const NO_BUTTONS = { inline_keyboard: [] as InlineKeyboardButton[][] };
+
+/**
+ * Relay keeps a message's inline keyboard when only its text is edited, so remove the
+ * buttons explicitly. "message is not modified" (buttons already gone) is fine, so only log.
+ */
+async function clearButtons(d: Deps, chatId: number, messageId: number) {
+  try {
+    await d.api.call("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: NO_BUTTONS });
+  } catch (err) {
+    console.error("editMessageReplyMarkup failed", err);
+  }
+}
+
 const asBool = (v: number | null) => (v === null ? null : v === 1);
 
 // ---------- incoming updates ----------
@@ -204,6 +218,10 @@ async function handlePottyReply(msg: Message, d: Deps) {
   const potty = parsePotty(msg.text);
   if (!walk || !potty) return;
   await d.store.setWalkPotty(walk.id, potty.pee, potty.poo);
+  // The prompt was sent to the group, so clear its buttons there.
+  if (walk.prompt_message_id !== null && d.config.groupChatId !== null) {
+    await clearButtons(d, d.config.groupChatId, walk.prompt_message_id);
+  }
   await announce(d, POTTY_LOGGED(walk.walker_name, pottyLabel(potty.pee, potty.poo)));
 }
 
@@ -231,7 +249,9 @@ async function handleCallback(cq: CallbackQuery, d: Deps) {
       message_id: cq.message.message_id,
       text,
       parse_mode: "HTML",
+      reply_markup: NO_BUTTONS,
     });
+    await clearButtons(d, cq.message.chat.id, cq.message.message_id);
   }
   await d.api.call("answerCallbackQuery", { callback_query_id: cq.id, text: "Logged! 🐾" });
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { handleUpdate, runTick } from "../src/bot";
 import { GROUP, groupMessage, makeTestDeps, person } from "./helpers";
 
@@ -143,8 +143,36 @@ describe("/walked", () => {
       deps,
     );
     expect((await store.walksOn("2026-12-01"))[0]).toMatchObject({ pee: 1, poo: 1 });
-    expect(api.calls.some((c) => c.method === "editMessageText")).toBe(true);
+    // Relay keeps the keyboard on a text edit, so both calls must clear the buttons.
+    const edit = api.calls.find((c) => c.method === "editMessageText")!;
+    expect(edit.body).toMatchObject({ chat_id: GROUP, message_id: 100, reply_markup: { inline_keyboard: [] } });
+    const markup = api.calls.find((c) => c.method === "editMessageReplyMarkup")!;
+    expect(markup.body).toEqual({ chat_id: GROUP, message_id: 100, reply_markup: { inline_keyboard: [] } });
+    expect(api.calls.indexOf(markup)).toBe(api.calls.indexOf(edit) + 1);
     expect(api.calls.at(-1)!.method).toBe("answerCallbackQuery");
+  });
+
+  it("still logs the tap when the buttons are already gone", async () => {
+    const { deps, api, store } = makeTestDeps({ now: at(8, 14) });
+    await handleUpdate(groupMessage("/walked"), deps);
+    api.failures.editMessageReplyMarkup = "Bad Request: message is not modified";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    await handleUpdate(
+      {
+        update_id: 2,
+        callback_query: {
+          id: "cb1",
+          from: { id: 555, first_name: "Nick" },
+          data: "potty:1:pee",
+          message: { message_id: 100, chat: { id: GROUP, type: "supergroup" }, date: 0 },
+        },
+      },
+      deps,
+    );
+    expect(errors).toHaveBeenCalledOnce();
+    errors.mockRestore();
+    expect((await store.walksOn("2026-12-01"))[0]).toMatchObject({ pee: 1, poo: 0 });
+    expect(api.calls.at(-1)).toMatchObject({ method: "answerCallbackQuery", body: { text: "Logged! 🐾" } });
   });
 
   it("accepts the answer inline and as a text reply", async () => {
@@ -161,6 +189,13 @@ describe("/walked", () => {
       deps,
     );
     expect((await store.walksOn("2026-12-01"))[1]).toMatchObject({ pee: 0, poo: 1 });
+    // The buttons on the original prompt are cleared too.
+    const markup = api.calls.find((c) => c.method === "editMessageReplyMarkup")!;
+    expect(markup.body).toEqual({
+      chat_id: GROUP,
+      message_id: walk.prompt_message_id,
+      reply_markup: { inline_keyboard: [] },
+    });
   });
 
   it("stores the walker's username", async () => {

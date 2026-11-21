@@ -44,7 +44,7 @@ Each message has a few variants, so she doesn't repeat the exact same line every
 
 - **A "Trudy day" runs 4am–4am.** A `/caged` at 12:30am still counts for the night before.
 - **DST-proof.** The cron runs every 15 minutes in UTC, and the code converts to Pacific time itself. If a send fails, the next tick in the same hour retries it.
-- **Relay limits respected.** The bot only uses `sendMessage`, `editMessageText`, `answerCallbackQuery`, `setWebhook`, `setMyCommands`, `getMe` and `getWebhookInfo`, all of which Relay supports. Relay can't list group members, which is another reason tagging is built from who has used `/walked`.
+- **Relay limits respected.** The bot only uses `sendMessage`, `editMessageText`, `editMessageReplyMarkup`, `answerCallbackQuery`, `setWebhook`, `setMyCommands`, `getMe` and `getWebhookInfo`. `editMessageReplyMarkup` only clears the pee/poo buttons, and if it fails the error is logged and ignored. Relay can't list group members, which is another reason tagging is built from who has used `/walked`.
 - **Relay often sends commands privately to the bot.** With `ALLOW_DM_COMMANDS=true`, a privately-sent `/walked` still counts, and Trudy announces it in the group.
 - **Webhook, not polling.** Relay POSTs each update to `https://walking-trudy.<you>.workers.dev/webhook`. The request is verified with the `X-Telegram-Bot-Api-Secret-Token` header.
 

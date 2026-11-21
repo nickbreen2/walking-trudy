@@ -13,6 +13,7 @@ Telegram-style bot for **Corgi Relay** (Telegram Bot API clone) that manages Tru
 - Updates delivered: only `message`, `edited_message`, `callback_query`.
 - NOT supported (404 METHOD_NOT_FOUND): sendChatAction, getChat, getChatMember, getChatAdministrators, pinning, reactions, polls, dice, forward/copyMessage, editMessageCaption/Media, sendMediaGroup. Don't use them.
 - Supported and used here: sendMessage (HTML, inline keyboards, message_thread_id), editMessageText, answerCallbackQuery, setWebhook, getWebhookInfo, setMyCommands, getMe.
+- Relay keeps a message's inline keyboard when only its text is edited. To remove the pee/poo buttons, pass `reply_markup: { inline_keyboard: [] }` to editMessageText and also call editMessageReplyMarkup. Errors from that call (e.g. "message is not modified") are only logged.
 - Webhook needs a publicly trusted HTTPS cert (workers.dev is fine); secret comes back in `X-Telegram-Bot-Api-Secret-Token`.
 - Commands are often sent privately to the bot; we accept private commands (`ALLOW_DM_COMMANDS`) and announce in the group.
 - One receiver per token: never run polling alongside the webhook (409 Conflict).

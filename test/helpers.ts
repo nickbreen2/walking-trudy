@@ -1,13 +1,16 @@
 import type { Deps } from "../src/bot";
 import { loadConfig } from "../src/config";
-import type { BotApi } from "../src/relay";
+import { BotApiError, type BotApi } from "../src/relay";
 import { MemoryStore } from "../src/store";
 
 export class FakeApi implements BotApi {
   calls: { method: string; body: Record<string, unknown> }[] = [];
   private nextId = 100;
+  /** Methods that should fail like Relay would, e.g. { editMessageReplyMarkup: "message is not modified" }. */
+  failures: Record<string, string> = {};
   async call<T>(method: string, body: Record<string, unknown> = {}): Promise<T> {
     this.calls.push({ method, body });
+    if (this.failures[method]) throw new BotApiError(method, 400, this.failures[method]);
     if (method === "sendMessage") return { message_id: this.nextId++ } as T;
     return true as T;
   }
