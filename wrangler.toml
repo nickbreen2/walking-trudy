@@ -12,8 +12,8 @@ crons = ["*/15 * * * *"]
 TELEGRAM_API_URL = "https://d1hbrzkrx7d3gv.cloudfront.net"
 TIMEZONE = "America/Los_Angeles"
 # Fill these in after adding the bot to the group (use /chatid in the group).
-GROUP_CHAT_ID = ""
-TOPIC_ID = ""
+GROUP_CHAT_ID = "-1000000000082"
+TOPIC_ID = "134"
 # Nobody is tagged until this many different people have used /walked.
 # After that, only people who have used /walked (and not sent /notag) are tagged.
 TAGGING_THRESHOLD = "10"
