@@ -5,11 +5,11 @@ import {
   CAGED,
   FED,
   HELP,
-  NOTAG,
   POTTY_LOGGED,
   POTTY_QUESTION,
   TAGGING_ON,
-  TAGME,
+  JOINED,
+  LEFT,
   escapeHtml,
   otherMessage,
   parsePotty,
@@ -135,9 +135,9 @@ export async function handleUpdate(update: Update, d: Deps): Promise<void> {
     case "food":
     case "water":
       return handleFed(msg, d);
-    case "notag":
-    case "tagme":
-      return handleTagPref(msg, cmd.name === "tagme", d);
+    case "join":
+    case "leave":
+      return handleTagPref(msg, cmd.name === "join", d);
     case "status":
     case "today":
       await replyTo(d, msg, await statusText(d));
@@ -195,8 +195,8 @@ async function maybeAnnounceTagging(d: Deps) {
 
 async function handleTagPref(msg: Message, allow: boolean, d: Deps) {
   if (!msg.from) return;
-  await d.store.setOptOut(walkerInfo(msg.from), !allow, d.now().toISOString());
-  await replyTo(d, msg, allow ? TAGME(displayName(msg.from)) : NOTAG(displayName(msg.from)));
+  await d.store.setTagPref(walkerInfo(msg.from), allow ? "join" : "leave", d.now().toISOString());
+  await replyTo(d, msg, allow ? JOINED(displayName(msg.from)) : LEFT(displayName(msg.from)));
 }
 
 async function handlePottyReply(msg: Message, d: Deps) {

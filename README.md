@@ -27,7 +27,7 @@ Commands:
 - `/caged`: "Thank you {name}! 😴 Goodnight, see you all tomorrow ❤️"
 - `/fed`: optional, logs that someone checked her food and water.
 - `/status`: today's walks, potty results, food, crate and tagging progress.
-- `/notag` / `/tagme`: opt out of (or back into) being tagged.
+- `/join` / `/leave`: opt in to being tagged, or never be tagged.
 - `/chatid`: prints the chat and topic ids (for setup).
 - `/help`
 
@@ -36,8 +36,8 @@ Each message has a few variants, so she doesn't repeat the exact same line every
 ### Tagging (opt-in by walking)
 
 - **Nobody is tagged at first.** Every `/walked` saves the walker's Relay user id and @username.
-- **When the 10th different person uses `/walked`, tagging switches on.** Trudy announces it once in the group and explains `/notag`. Change the threshold with `TAGGING_THRESHOLD`.
-- **Only people who have used `/walked` are ever tagged.** Anyone who sends `/notag` (even before they've walked her) is never tagged, and people with no @username are skipped.
+- **When the 10th different person uses `/walked`, tagging switches on.** Trudy announces it once in the group and explains `/leave`. Change the threshold with `TAGGING_THRESHOLD`.
+- **Only people who have used `/walked` or `/join` are ever tagged.** `/join` adds someone to the pool without walking her, but only walks count toward the 10. Anyone who sends `/leave` (even before they've walked her) is never tagged, and people with no @username are skipped.
 - **Each walk reminder tags one person.** Picks are random but fair: everyone is tagged once before anyone repeats, and nobody is tagged twice in a row.
 
 ### Design notes

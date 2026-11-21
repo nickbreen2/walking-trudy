@@ -23,4 +23,4 @@ Telegram-style bot for **Corgi Relay** (Telegram Bot API clone) that manages Tru
 - Timetable lives in `src/schedule.ts`; times are local (`TIMEZONE`, default America/Los_Angeles). Cron is `*/15 * * * *` UTC.
 - Business logic in `src/bot.ts` takes a `Deps` object (store, api, config, now, random) so it is testable; keep Cloudflare specifics in `src/index.ts`.
 - Never commit the bot token; it's a Wrangler secret.
-- Tagging is consent-based: no tags until `TAGGING_THRESHOLD` (10) different people have used /walked; only people in the `walkers` table who haven't sent /notag are tagged. Don't add a hard-coded list of people to tag.
+- Tagging is consent-based: no tags until `TAGGING_THRESHOLD` (10) different people have used /walked; then only people in the `walkers` table who walked or sent /join, and haven't sent /leave, are tagged. Don't add a hard-coded list of people to tag.

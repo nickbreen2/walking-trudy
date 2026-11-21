@@ -11,8 +11,8 @@ export const BOT_COMMANDS = [
   { command: "caged", description: "Trudy is in her crate for the night" },
   { command: "fed", description: "I checked Trudy's food and water" },
   { command: "status", description: "What happened today" },
-  { command: "notag", description: "Never tag me for walks" },
-  { command: "tagme", description: "OK to tag me for walks" },
+  { command: "join", description: "OK to tag me when Trudy needs a walk" },
+  { command: "leave", description: "Never tag me for walks" },
   { command: "help", description: "How Trudy works" },
 ];
 

@@ -28,6 +28,7 @@ export interface WalkerRow {
   first_walked_at: string;
   last_walked_at: string;
   walk_count: number;
+  joined: number;
   opted_out: number;
 }
 
@@ -68,9 +69,10 @@ export interface Store {
   recordWalker(w: WalkerInfo, at: string): Promise<boolean>;
   /** Number of different people who have walked Trudy. */
   walkerCount(): Promise<number>;
-  /** "@username" of walkers who can be tagged (have a username, not opted out). */
+  /** "@username"s who can be tagged: walked or joined, have a username, haven't left. */
   taggableWalkers(): Promise<string[]>;
-  setOptOut(w: WalkerInfo, optedOut: boolean, at: string): Promise<void>;
+  /** /join (ok to tag) or /leave (never tag). */
+  setTagPref(w: WalkerInfo, pref: "join" | "leave", at: string): Promise<void>;
 }
 
 const DAY_COLUMNS = ["assignee", "backup", "fed_by", "fed_at", "caged_by", "caged_at"] as const;
@@ -188,20 +190,22 @@ export class D1Store implements Store {
   async taggableWalkers() {
     const res = await this.db
       .prepare(
-        "SELECT username FROM walkers WHERE walk_count > 0 AND opted_out = 0 AND username IS NOT NULL AND username != '' ORDER BY first_walked_at",
+        "SELECT username FROM walkers WHERE (walk_count > 0 OR joined = 1) AND opted_out = 0 AND username IS NOT NULL AND username != '' ORDER BY first_walked_at",
       )
       .all<{ username: string }>();
     return (res.results ?? []).map((r) => "@" + r.username);
   }
 
-  async setOptOut(w: WalkerInfo, optedOut: boolean, at: string) {
+  async setTagPref(w: WalkerInfo, pref: "join" | "leave", at: string) {
+    const joined = pref === "join" ? 1 : 0;
     await this.db
       .prepare(
-        `INSERT INTO walkers (user_id, username, first_name, first_walked_at, last_walked_at, walk_count, opted_out)
-         VALUES (?, ?, ?, ?, ?, 0, ?)
-         ON CONFLICT(user_id) DO UPDATE SET opted_out = excluded.opted_out, username = excluded.username`,
+        `INSERT INTO walkers (user_id, username, first_name, first_walked_at, last_walked_at, walk_count, joined, opted_out)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           joined = excluded.joined, opted_out = excluded.opted_out, username = excluded.username`,
       )
-      .bind(w.userId, w.username, w.firstName, at, at, optedOut ? 1 : 0)
+      .bind(w.userId, w.username, w.firstName, at, at, joined, 1 - joined)
       .run();
   }
 }
@@ -287,6 +291,7 @@ export class MemoryStore implements Store {
       first_walked_at: isNew ? at : cur!.first_walked_at,
       last_walked_at: at,
       walk_count: (cur?.walk_count ?? 0) + 1,
+      joined: cur?.joined ?? 0,
       opted_out: cur?.opted_out ?? 0,
     });
     return isNew;
@@ -296,11 +301,11 @@ export class MemoryStore implements Store {
   }
   async taggableWalkers() {
     return [...this.walkers.values()]
-      .filter((w) => w.walk_count > 0 && !w.opted_out && w.username)
+      .filter((w) => (w.walk_count > 0 || w.joined) && !w.opted_out && w.username)
       .sort((a, b) => a.first_walked_at.localeCompare(b.first_walked_at))
       .map((w) => "@" + w.username);
   }
-  async setOptOut(w: WalkerInfo, optedOut: boolean, at: string) {
+  async setTagPref(w: WalkerInfo, pref: "join" | "leave", at: string) {
     const cur = this.walkers.get(w.userId);
     this.walkers.set(w.userId, {
       user_id: w.userId,
@@ -309,7 +314,8 @@ export class MemoryStore implements Store {
       first_walked_at: cur?.first_walked_at ?? at,
       last_walked_at: cur?.last_walked_at ?? at,
       walk_count: cur?.walk_count ?? 0,
-      opted_out: optedOut ? 1 : 0,
+      joined: pref === "join" ? 1 : 0,
+      opted_out: pref === "leave" ? 1 : 0,
     });
   }
 }

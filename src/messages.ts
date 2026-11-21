@@ -130,10 +130,11 @@ export const FED = (name: string) =>
   `Thanks ${escapeHtml(name)}! My bowls and I are grateful 🥣💧❤️`;
 
 export const TAGGING_ON = (n: number) =>
-  `🎉 ${n} different people have walked me! From now on I'll tag one of my walkers when I need to go out.\nDon't want to be tagged? Send /notag (and /tagme to opt back in).`;
+  `🎉 ${n} different people have walked me! From now on I'll tag one of my walkers when I need to go out.\nDon't want to be tagged? Send /leave (and /join to come back).`;
 
-export const NOTAG = (name: string) => `Got it ${escapeHtml(name)}, I won't tag you. 🤐 Send /tagme if you change your mind.`;
-export const TAGME = (name: string) => `Yay ${escapeHtml(name)}! 🐾 I may tag you when I need a walk. Send /notag to stop.`;
+export const JOINED = (name: string) =>
+  `Yay ${escapeHtml(name)}! 🐾 You're on my walk crew. Once tagging is on, I may tag you when I need to go out. Send /leave to stop.`;
+export const LEFT = (name: string) => `Got it ${escapeHtml(name)}, I won't tag you. 🤐 Send /join if you change your mind.`;
 
 export const HELP = `🐶 <b>I'm Trudy!</b> Here's how to take care of me:
 
@@ -141,8 +142,8 @@ export const HELP = `🐶 <b>I'm Trudy!</b> Here's how to take care of me:
 /caged — I'm in my crate for the night
 /fed — you checked my food and water
 /status — what's happened today
-/notag — never tag me · /tagme — ok to tag me
+/join — ok to tag me for walks · /leave — never tag me
 /help — this message
 
 I ask for a walk every 2 hours from 7am to 9pm (I skip it if I was walked in the last 2 hours). Bedtime ask is at 10pm.
-I don't tag anyone until 10 different people have walked me, and then only people who have used /walked.`;
+I don't tag anyone until 10 different people have walked me, and then only people who have used /walked or /join.`;

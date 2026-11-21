@@ -78,20 +78,27 @@ describe("consent-based tagging", () => {
     expect(tags[0]).toMatch(/^@person(\d+)$/);
   });
 
-  it("/notag removes someone from tagging and /tagme adds them back", async () => {
+  it("/leave removes someone from tagging and /join adds them back", async () => {
     const { deps, store } = makeTestDeps({ now: at(6), threshold: 2 });
     await walkBy(deps, 1);
     await walkBy(deps, 2);
     expect(await store.taggableWalkers()).toEqual(["@person1", "@person2"]);
-    await handleUpdate(groupMessage("/notag", { from: person(1) }), deps);
+    await handleUpdate(groupMessage("/leave", { from: person(1) }), deps);
     expect(await store.taggableWalkers()).toEqual(["@person2"]);
-    await handleUpdate(groupMessage("/tagme", { from: person(1) }), deps);
+    await handleUpdate(groupMessage("/join", { from: person(1) }), deps);
     expect(await store.taggableWalkers()).toContain("@person1");
   });
 
-  it("someone who opts out before ever walking is never counted or tagged", async () => {
+  it("/join lets someone be tagged without walking, but doesn't count toward the 10", async () => {
     const { deps, store } = makeTestDeps({ now: at(6), threshold: 2 });
-    await handleUpdate(groupMessage("/notag", { from: person(5) }), deps);
+    await handleUpdate(groupMessage("/join", { from: person(7) }), deps);
+    expect(await store.walkerCount()).toBe(0);
+    expect(await store.taggableWalkers()).toEqual(["@person7"]);
+  });
+
+  it("someone who sends /leave before ever walking is never counted or tagged", async () => {
+    const { deps, store } = makeTestDeps({ now: at(6), threshold: 2 });
+    await handleUpdate(groupMessage("/leave", { from: person(5) }), deps);
     expect(await store.walkerCount()).toBe(0);
     await walkBy(deps, 5);
     expect(await store.walkerCount()).toBe(1);
