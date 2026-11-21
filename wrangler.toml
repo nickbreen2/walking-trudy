@@ -15,7 +15,7 @@ TIMEZONE = "America/Los_Angeles"
 GROUP_CHAT_ID = "-1000000000082"
 TOPIC_ID = "134"
 # Nobody is tagged until this many different people have used /walked.
-# After that, only people who have used /walked (and not sent /notag) are tagged.
+# After that, only people who have used /walked or /join (and not sent /leave) are tagged.
 TAGGING_THRESHOLD = "10"
 # Relay often sends commands privately to the bot. Accept them and announce in the group.
 ALLOW_DM_COMMANDS = "true"
