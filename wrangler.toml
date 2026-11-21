@@ -1,0 +1,33 @@
+name = "walking-trudy"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+# Every 15 minutes. The code converts to Pacific time itself, so DST is handled
+# and a failed send is retried on the next tick within the same hour.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+# Corgi Relay Bot API address (from "Moving a Telegram Bot to Corgi Relay").
+TELEGRAM_API_URL = "https://d1hbrzkrx7d3gv.cloudfront.net"
+TIMEZONE = "America/Los_Angeles"
+# Fill these in after adding the bot to the group (use /chatid in the group).
+GROUP_CHAT_ID = ""
+TOPIC_ID = ""
+# Comma-separated Relay @usernames who can be tagged for walks, e.g. "@nick,@andres"
+WALKERS = ""
+# Relay often sends commands privately to the bot. Accept them and announce in the group.
+ALLOW_DM_COMMANDS = "true"
+# Days Trudy's schedule runs (Mon,Tue,Wed,Thu,Fri,Sat,Sun).
+ACTIVE_DAYS = "Mon,Tue,Wed,Thu,Fri,Sat,Sun"
+
+# Secrets (set with `npx wrangler secret put <NAME>`, never commit):
+#   TELEGRAM_BOT_TOKEN  - from Corgi Bot Studio
+#   WEBHOOK_SECRET      - random string; Relay sends it back in X-Telegram-Bot-Api-Secret-Token
+#   ADMIN_SECRET        - random string; protects /admin/* endpoints
+
+[[d1_databases]]
+binding = "DB"
+database_name = "walking-trudy"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+migrations_dir = "migrations"

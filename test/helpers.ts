@@ -1,0 +1,56 @@
+import type { Deps } from "../src/bot";
+import { loadConfig } from "../src/config";
+import type { BotApi } from "../src/relay";
+import { MemoryStore } from "../src/store";
+
+export class FakeApi implements BotApi {
+  calls: { method: string; body: Record<string, unknown> }[] = [];
+  private nextId = 100;
+  async call<T>(method: string, body: Record<string, unknown> = {}): Promise<T> {
+    this.calls.push({ method, body });
+    if (method === "sendMessage") return { message_id: this.nextId++ } as T;
+    return true as T;
+  }
+  sent() {
+    return this.calls.filter((c) => c.method === "sendMessage").map((c) => String(c.body.text));
+  }
+}
+
+export const GROUP = -100123;
+
+export function makeTestDeps(opts: { now: string; walkers?: string } ) {
+  const store = new MemoryStore();
+  const api = new FakeApi();
+  let now = new Date(opts.now);
+  let seed = 42;
+  const deps: Deps = {
+    store,
+    api,
+    config: loadConfig({
+      GROUP_CHAT_ID: String(GROUP),
+      TOPIC_ID: "7",
+      WALKERS: opts.walkers ?? "@nick,@andres,@michael,@matt",
+      TIMEZONE: "America/Los_Angeles",
+    }),
+    now: () => now,
+    random: () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    },
+  };
+  return { deps, store, api, setNow: (iso: string) => (now = new Date(iso)) };
+}
+
+export function groupMessage(text: string, extra: Record<string, unknown> = {}) {
+  return {
+    update_id: 1,
+    message: {
+      message_id: 1,
+      chat: { id: GROUP, type: "supergroup" as const },
+      from: { id: 555, first_name: "Nick", username: "nick" },
+      date: 0,
+      text,
+      ...extra,
+    },
+  };
+}
