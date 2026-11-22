@@ -22,6 +22,7 @@ Telegram-style bot for **Corgi Relay** (Telegram Bot API clone) that manages Tru
 ## Conventions
 - This repo is a template for any office dog: the dog's name comes from `DOG_NAME` (never hard-code "Trudy" in user-facing text), the time zone from `TIMEZONE`. Per-office values live only in `wrangler.toml`.
 - All user-facing text lives in `src/messages.ts`, sent with `parse_mode: "HTML"` — always `escapeHtml` user-supplied names.
+- Scoreboards (`src/scoreboard.ts`) never tag people: first names only. Weeks run Mon–Sun, scheduled posts at 20:30 local on Sundays and on the last day of the month.
 - Timetable lives in `src/schedule.ts`; times are local (`TIMEZONE`, default America/Los_Angeles). Cron is `*/15 * * * *` UTC.
 - Business logic in `src/bot.ts` takes a `Deps` object (store, api, config, now, random) so it is testable; keep Cloudflare specifics in `src/index.ts`.
 - Never commit the bot token; it's a Wrangler secret.

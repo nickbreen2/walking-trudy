@@ -58,6 +58,8 @@ export interface Store {
   setWalkPrompt(id: number, messageId: number): Promise<void>;
   findWalkByPrompt(messageId: number): Promise<WalkRow | null>;
   walksOn(date: string): Promise<WalkRow[]>;
+  /** Walks on dog days start..end inclusive (YYYY-MM-DD). */
+  walksBetween(start: string, end: string): Promise<WalkRow[]>;
   /** Returns true if this call claimed the slot (it wasn't sent yet). */
   claimSlot(date: string, slot: string, at: string): Promise<boolean>;
   releaseSlot(date: string, slot: string): Promise<void>;
@@ -130,6 +132,14 @@ export class D1Store implements Store {
 
   async walksOn(date: string) {
     const res = await this.db.prepare("SELECT * FROM walks WHERE date = ? ORDER BY walked_at").bind(date).all<WalkRow>();
+    return res.results ?? [];
+  }
+
+  async walksBetween(start: string, end: string) {
+    const res = await this.db
+      .prepare("SELECT * FROM walks WHERE date >= ? AND date <= ? ORDER BY walked_at")
+      .bind(start, end)
+      .all<WalkRow>();
     return res.results ?? [];
   }
 
@@ -262,6 +272,9 @@ export class MemoryStore implements Store {
   }
   async walksOn(date: string) {
     return this.walks.filter((w) => w.date === date);
+  }
+  async walksBetween(start: string, end: string) {
+    return this.walks.filter((w) => w.date >= start && w.date <= end);
   }
   async claimSlot(date: string, slot: string) {
     const k = `${date}|${slot}`;

@@ -1,6 +1,6 @@
 # Office Dog Bot 🐶
 
-A Corgi Relay bot that looks after an office dog. It asks the office to walk the dog every couple of hours, logs pee and poo, reminds people about food and water, and asks for the crate at night.
+A Corgi Relay bot that looks after an office dog. It asks the office to walk the dog every couple of hours, logs pee and poo, reminds people about food and water, asks for the crate at night, and posts a weekly and monthly scoreboard of who walked the dog the most.
 
 It started as **Trudy** (`@walking_trudy_bot`) for the SF office. **Want one for your office's dog? Follow [Make a bot for your office dog](#make-a-bot-for-your-office-dog) below.** It takes about 30 minutes and costs nothing.
 
@@ -18,8 +18,9 @@ It started as **Trudy** (`@walking_trudy_bot`) for the SF office. **Want one for
 |---|---|---|
 | 7am, 9am, 11am, 1pm, 3pm, 5pm, 7pm, **9pm (last call)** | Walk reminder | If the dog was walked in the last 2 hours |
 | 12pm, 6pm | "Hey can someone make sure I have enough water and food to survive? 🥣💧" | Never (no reply needed) |
-| 10pm | "Can someone take me to my crate? I'm getting tired here 😴" | If someone already sent `/caged` |
-| 11pm | "Still up... 🥱 Someone take me to my crate?" | If someone already sent `/caged` |
+| 10pm | "Hey, can somebody come tuck me in? I'm tired 😴" (one ask, no follow-up) | If someone already sent `/caged` |
+| **Sundays 8:30pm** | Weekly walk scoreboard (Mon–Sun), then "Thanks {name} for walking me the most this week ❤️ You're the best!" | Never |
+| **Last day of the month, 8:30pm** | Monthly walk scoreboard, then a separate thank-you to the month's top walker(s) | Never |
 
 The walk reminder changes with the day: "Good morning! Can someone walk me?" at 7am, then "Still waiting on my walk 🥺", then "Getting more desperate here, I need to go to the bathroom 😰" if nobody has walked them. Once someone has, it becomes "Walk time again? Last walk was Nick at 8:14 AM."
 
@@ -31,9 +32,14 @@ The walk reminder changes with the day: "Good morning! Can someone walk me?" at 
 | `/caged` | "Thank you {name}! 😴 Goodnight, see you all tomorrow ❤️" |
 | `/fed` | Logs that someone checked food and water |
 | `/status` | Today's walks, potty results, food, crate and tagging progress |
+| `/daily_walks` · `/weekly_walks` · `/monthly_walks` | Scoreboard of who walked the dog the most today, this week (Mon–Sun) or this month |
 | `/join` / `/leave` | OK to tag me / never tag me |
 | `/chatid` | Shows the chat and topic id (used during setup) |
 | `/help` | How the bot works |
+
+### Scoreboards
+
+The scoreboard ranks everyone who logged a walk in the period, with 🥇🥈🥉 for the top three. People tied on the same number of walks share a place, and the thank-you message names everyone tied for first. Scoreboards use first names only and never tag anyone. They go out at 8:30pm, after the 7pm walk and before the 9pm last call, and even on days excluded by `ACTIVE_DAYS`. If nobody walked the dog that week or month, only the scoreboard is posted, with no thank-you.
 
 ### Tagging is opt-in
 
@@ -178,7 +184,8 @@ This posts that one message now and doesn't change the schedule. Then try `/walk
 | Time zone | `TIMEZONE` in `wrangler.toml` |
 | Days the schedule runs (e.g. weekdays only) | `ACTIVE_DAYS = "Mon,Tue,Wed,Thu,Fri"` in `wrangler.toml` |
 | How many walkers before tagging starts | `TAGGING_THRESHOLD` in `wrangler.toml` |
-| Walk reminder times, food times, crate time | `src/schedule.ts` (`WALK_HOURS`, `RECENT_WALK_MINUTES`, `SCHEDULE`) |
+| Walk reminder times, food times, crate time, scoreboard time | `src/schedule.ts` (`WALK_HOURS`, `RECENT_WALK_MINUTES`, `SCHEDULE`) |
+| Scoreboard and thank-you wording | `src/scoreboard.ts` |
 | Everything the dog says | `src/messages.ts`. Each message has a few variants, picked at random |
 
 After any change: `npm test`, then `npm run deploy`.
@@ -216,7 +223,7 @@ All of these are `POST` with `Authorization: Bearer $ADMIN_SECRET`:
 | `/admin/fire?slot=<id>` | Sends one scheduled message now |
 | `/admin/tick` | Runs the scheduler as if the cron just fired |
 
-Slot ids: `walk_07`, `walk_09`, `walk_11`, `walk_13`, `walk_15`, `walk_17`, `walk_19`, `walk_21`, `food_water_12`, `food_water_18`, `crate_ask`, `crate_nudge`.
+Slot ids: `walk_07`, `walk_09`, `walk_11`, `walk_13`, `walk_15`, `walk_17`, `walk_19`, `walk_21`, `food_water_12`, `food_water_18`, `crate_ask`, `weekly_scoreboard`, `monthly_scoreboard`.
 
 ## Development
 
@@ -232,6 +239,7 @@ src/index.ts     Worker entry: /webhook, /admin/*, cron
 src/bot.ts       Commands and scheduler logic
 src/schedule.ts  The daily timetable        ← edit times here
 src/messages.ts  Everything the dog says    ← edit wording here
+src/scoreboard.ts Daily/weekly/monthly walk scoreboards and thank-yous
 src/rotation.ts  Fair random tagging
 src/clock.ts     Time zone and "dog day" math
 src/store.ts     D1 storage (+ in-memory store for tests)

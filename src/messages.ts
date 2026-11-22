@@ -1,8 +1,6 @@
 // Everything the dog says (the name comes from DOG_NAME). Each message has a few variants so she doesn't sound
 // like a robot; one is picked at random. All text is sent with parse_mode=HTML.
 
-import type { SlotKind } from "./schedule";
-
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -69,20 +67,22 @@ export function walkMessage(c: WalkContext, random: () => number): string {
   return `${text}\n\n${SIGN_OFF}`;
 }
 
-const OTHER: Record<Exclude<SlotKind, "walk">, string[]> = {
+export type OtherKind = "food_water" | "crate_ask";
+
+const OTHER: Record<OtherKind, string[]> = {
   food_water: [
     `Hey can someone make sure I have enough water and food to survive? 🥣💧`,
     `Quick bowl check? 🥣💧 A pup's gotta stay hydrated.`,
     `Is my water bowl full? Asking for a thirsty corgi 💧🐶`,
   ],
   crate_ask: [
-    `Can someone take me to my crate? I'm getting tired here 😴\nType /caged when I'm tucked in.`,
-    `Yawn... 🥱 Bedtime. Who's tucking me in?\nType /caged when I'm in my crate.`,
+    `Hey, can somebody come tuck me in? I'm tired 😴\nType /caged when I'm in my crate.`,
+    `Can someone take me to my crate? I'm getting sleepy here 🥱\nType /caged when I'm tucked in.`,
+    `Bedtime! 🌙 Who's tucking me in tonight? 😴\nType /caged when I'm in my crate.`,
   ],
-  crate_nudge: [`Still up... 🥱🌙 Someone take me to my crate? /caged`, `It's past my bedtime 😪 Crate please! /caged`],
 };
 
-export function otherMessage(kind: Exclude<SlotKind, "walk">, random: () => number): string {
+export function otherMessage(kind: OtherKind, random: () => number): string {
   return pickOne(OTHER[kind], random);
 }
 
@@ -142,8 +142,9 @@ export const helpText = (dogName: string) => `🐶 <b>I'm ${escapeHtml(dogName)}
 /caged — I'm in my crate for the night
 /fed — you checked my food and water
 /status — what's happened today
+/daily_walks · /weekly_walks · /monthly_walks — who walked me the most
 /join — ok to tag me for walks · /leave — never tag me
 /help — this message
 
-I ask for a walk every 2 hours from 7am to 9pm (I skip it if I was walked in the last 2 hours). Bedtime ask is at 10pm.
+I ask for a walk every 2 hours from 7am to 9pm (I skip it if I was walked in the last 2 hours). Bedtime ask is at 10pm. Every Sunday at 8:30pm I post the weekly scoreboard, and on the last day of the month the monthly one.
 I don't tag anyone until 10 different people have walked me, and then only people who have used /walked or /join.`;

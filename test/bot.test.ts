@@ -206,6 +206,17 @@ describe("/walked", () => {
 });
 
 describe("night crate flow", () => {
+  it("sends one bedtime ask at 10pm and no 11pm follow-up, even if nobody /caged", async () => {
+    const { deps, api, setNow } = makeTestDeps({ now: at(22) });
+    expect(await runTick(deps)).toEqual(["crate_ask"]);
+    expect(api.sent().at(-1)).toMatch(/\/caged/);
+    for (const m of [0, 15, 30, 45]) {
+      setNow(at(23, m));
+      expect(await runTick(deps)).toEqual([]);
+    }
+    expect(api.sent()).toHaveLength(1);
+  });
+
   it("asks at 10pm, /caged thanks, and the 11pm nudge is skipped", async () => {
     const { deps, api, setNow } = makeTestDeps({ now: at(22) });
     expect(await runTick(deps)).toEqual(["crate_ask"]);
@@ -251,5 +262,116 @@ describe("DOG_NAME", () => {
     expect(api.sent().at(-1)).toContain("I'm Biscuit!");
     await handleUpdate(groupMessage("/status"), deps);
     expect(api.sent().at(-1)).toContain("Biscuit's day");
+  });
+});
+
+// Pacific local time on any date. offset = 8 (PST) or 7 (PDT).
+const atOn = (date: string, h: number, m = 0, offset = 8) => {
+  const [y, mo, d] = date.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, mo - 1, d, h + offset, m)).toISOString();
+};
+
+describe("scoreboards", () => {
+  async function walkAt(t: ReturnType<typeof makeTestDeps>, iso: string, i: number) {
+    t.setNow(iso);
+    await handleUpdate(groupMessage("/walked pee", { from: person(i) }), t.deps);
+  }
+
+  it("posts the weekly scoreboard and a thank-you on Sunday at 8:30pm, naming everyone tied for first", async () => {
+    const t = makeTestDeps({ now: atOn("2026-11-16", 8) });
+    // Mon–Sun Nov 16–22: person1 x3, person2 x3, person3 x1. A walk the Sunday before doesn't count.
+    await walkAt(t, atOn("2026-11-15", 9), 3);
+    for (const [day, who] of [["16", 1], ["17", 1], ["18", 2], ["19", 2], ["20", 1], ["21", 2], ["22", 3]] as const) {
+      await walkAt(t, atOn(`2026-11-${day}`, 10), who);
+    }
+    const before = t.api.sent().length;
+
+    t.setNow(atOn("2026-11-22", 20, 15));
+    expect(await runTick(t.deps)).toEqual([]);
+    t.setNow(atOn("2026-11-22", 20, 30));
+    expect(await runTick(t.deps)).toEqual(["weekly_scoreboard"]);
+    t.setNow(atOn("2026-11-22", 20, 45));
+    expect(await runTick(t.deps)).toEqual([]);
+
+    const [board, thanks, ...rest] = t.api.sent().slice(before);
+    expect(rest).toEqual([]);
+    expect(board).toContain("Trudy's Weekly Walk Scoreboard");
+    expect(board).toContain("Nov 16 – Nov 22");
+    expect(board).toContain("🥇 Person1 — 3 walks");
+    expect(board).toContain("🥇 Person2 — 3 walks");
+    expect(board).toContain("🥉 Person3 — 1 walk");
+    expect(board).toContain("7 walks from 3 people");
+    expect(board).not.toContain("@");
+    expect(thanks).toMatch(/Person1 and Person2/);
+    expect(thanks).toMatch(/❤️/);
+    expect(thanks).not.toContain("Person3");
+  });
+
+  it("does not post the weekly scoreboard on other days", async () => {
+    const t = makeTestDeps({ now: atOn("2026-11-21", 20, 30) }); // Saturday
+    expect(await runTick(t.deps)).toEqual([]);
+  });
+
+  it("posts only the scoreboard (no thank-you) when nobody walked", async () => {
+    const t = makeTestDeps({ now: atOn("2026-11-22", 20, 30) });
+    expect(await runTick(t.deps)).toEqual(["weekly_scoreboard"]);
+    expect(t.api.sent()).toHaveLength(1);
+    expect(t.api.sent()[0]).toContain("No walks logged this week");
+  });
+
+  it("posts the monthly scoreboard and a separate love note on the last day of the month", async () => {
+    const t = makeTestDeps({ now: atOn("2026-11-02", 8) });
+    await walkAt(t, atOn("2026-10-31", 9), 2); // October doesn't count
+    await walkAt(t, atOn("2026-11-02", 9), 1);
+    await walkAt(t, atOn("2026-11-12", 9), 1);
+    await walkAt(t, atOn("2026-11-29", 9), 2);
+    const before = t.api.sent().length;
+
+    t.setNow(atOn("2026-11-29", 20, 30)); // a Sunday, not the last day: weekly only
+    expect(await runTick(t.deps)).toEqual(["weekly_scoreboard"]);
+    t.setNow(atOn("2026-11-30", 20, 30)); // Monday Nov 30
+    expect(await runTick(t.deps)).toEqual(["monthly_scoreboard"]);
+
+    const [board, love] = t.api.sent().slice(before + 2);
+    expect(board).toContain("Trudy's Monthly Walk Scoreboard");
+    expect(board).toContain("November 2026");
+    expect(board).toContain("🥇 Person1 — 2 walks");
+    expect(board).toContain("🥈 Person2 — 1 walk");
+    expect(love).toMatch(/Person1/);
+    expect(love).toMatch(/November/);
+  });
+
+  it("posts weekly then monthly when the last day of the month is a Sunday", async () => {
+    const t = makeTestDeps({ now: atOn("2026-05-31", 20, 30, 7) });
+    expect(await runTick(t.deps)).toEqual(["weekly_scoreboard", "monthly_scoreboard"]);
+  });
+
+  it("still posts scoreboards when ACTIVE_DAYS excludes Sunday", async () => {
+    const t = makeTestDeps({ now: atOn("2026-11-22", 20, 30) });
+    t.deps.config.activeDays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    expect(await runTick(t.deps)).toEqual(["weekly_scoreboard"]);
+    t.setNow(atOn("2026-11-22", 21));
+    expect(await runTick(t.deps)).toEqual([]); // the 9pm walk reminder respects ACTIVE_DAYS
+  });
+
+  it("/daily_walks, /weekly_walks and /monthly_walks reply with the scoreboard and no thank-you", async () => {
+    const t = makeTestDeps({ now: atOn("2026-11-20", 9) });
+    await walkAt(t, atOn("2026-11-20", 9), 1);
+    await walkAt(t, atOn("2026-11-22", 9), 2);
+    await walkAt(t, atOn("2026-11-22", 11, 30), 2);
+
+    for (const [cmd, expected] of [
+      ["/daily_walks", ["Walks Today", "Person2 — 2 walks"]],
+      ["/weekly_walks", ["Weekly Walk Scoreboard", "🥇 Person2 — 2 walks", "🥈 Person1 — 1 walk"]],
+      ["/monthly_walks@walking_trudy_bot", ["Monthly Walk Scoreboard", "November 2026"]],
+    ] as const) {
+      const before = t.api.sent().length;
+      await handleUpdate(groupMessage(cmd), t.deps);
+      const replies = t.api.sent().slice(before);
+      expect(replies).toHaveLength(1);
+      for (const e of expected) expect(replies[0]).toContain(e);
+    }
+    const daily = t.api.sent().at(-3)!;
+    expect(daily).not.toContain("Person1");
   });
 });

@@ -4,6 +4,8 @@ import { localClock } from "../src/clock";
 import { parsePotty } from "../src/messages";
 import { pickFromBag } from "../src/rotation";
 import { dueSlots } from "../src/schedule";
+import { isLastDayOfMonth, joinNames, periodRange, tally } from "../src/scoreboard";
+import type { WalkRow } from "../src/store";
 
 const TZ = "America/Los_Angeles";
 
@@ -77,5 +79,45 @@ describe("dueSlots", () => {
     expect(walkHours).toEqual([7, 9, 11, 13, 15, 17, 19, 21]);
     expect(dueSlots(7, 45).map((s) => s.id)).toEqual(["walk_07"]);
     expect(dueSlots(8, 0)).toEqual([]);
+    expect(dueSlots(23, 0)).toEqual([]); // no 11pm crate follow-up
+  });
+});
+
+describe("scoreboard helpers", () => {
+  it("weeks run Monday to Sunday", () => {
+    expect(periodRange("2026-11-22", "week")).toMatchObject({ start: "2026-11-16", end: "2026-11-22" });
+    expect(periodRange("2026-11-16", "week")).toMatchObject({ start: "2026-11-16", end: "2026-11-22" });
+    expect(periodRange("2026-12-31", "week")).toMatchObject({ start: "2026-12-28", end: "2027-01-03" });
+  });
+  it("months cover the whole calendar month", () => {
+    expect(periodRange("2026-02-10", "month")).toMatchObject({ start: "2026-02-01", end: "2026-02-28", label: "February 2026" });
+    expect(periodRange("2028-02-10", "month")).toMatchObject({ end: "2028-02-29" });
+  });
+  it("knows the last day of the month", () => {
+    expect(isLastDayOfMonth("2026-11-30")).toBe(true);
+    expect(isLastDayOfMonth("2026-11-29")).toBe(false);
+    expect(isLastDayOfMonth("2026-12-31")).toBe(true);
+  });
+  it("ranks ties together and groups by person", () => {
+    const w = (id: number | null, name: string, at: string): WalkRow => ({
+      id: 0, date: "2026-11-20", walker_name: name, walker_id: id, walked_at: at, pee: null, poo: null, prompt_message_id: null,
+    });
+    const entries = tally([
+      w(1, "Nick", "2026-11-20T10:00:00Z"),
+      w(1, "Nicolas", "2026-11-21T10:00:00Z"), // same person, newer name wins
+      w(2, "Matt", "2026-11-20T10:00:00Z"),
+      w(2, "Matt", "2026-11-20T12:00:00Z"),
+      w(3, "Luiz", "2026-11-20T10:00:00Z"),
+    ]);
+    expect(entries).toEqual([
+      { name: "Matt", count: 2, rank: 1 },
+      { name: "Nicolas", count: 2, rank: 1 },
+      { name: "Luiz", count: 1, rank: 3 },
+    ]);
+  });
+  it("joins names naturally", () => {
+    expect(joinNames(["Nick"])).toBe("Nick");
+    expect(joinNames(["Nick", "Matt"])).toBe("Nick and Matt");
+    expect(joinNames(["Nick", "Matt", "Luiz"])).toBe("Nick, Matt and Luiz");
   });
 });

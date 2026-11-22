@@ -20,7 +20,17 @@ import {
 } from "./messages";
 import type { BotApi } from "./relay";
 import { pickFromBag } from "./rotation";
-import { FIRST_WALK_HOUR, LAST_WALK_HOUR, RECENT_WALK_MINUTES, SCHEDULE, dueSlots, type Slot } from "./schedule";
+import {
+  FIRST_WALK_HOUR,
+  LAST_WALK_HOUR,
+  RECENT_WALK_MINUTES,
+  SCHEDULE,
+  dueSlots,
+  isScoreboard,
+  runsOn,
+  type Slot,
+} from "./schedule";
+import { periodRange, scoreboardText, tally, thanksText, topWalkers, type Period } from "./scoreboard";
 import type { Store, WalkRow } from "./store";
 import type { CallbackQuery, Chat, InlineKeyboardButton, Message, Update, User } from "./types";
 
@@ -152,6 +162,20 @@ export async function handleUpdate(update: Update, d: Deps): Promise<void> {
     case "join":
     case "leave":
       return handleTagPref(msg, cmd.name === "join", d);
+    case "daily_walks":
+    case "daily":
+      await replyTo(d, msg, await scoreboard("day", today(d).date, d));
+      return;
+    case "weekly_walks":
+    case "weekly":
+    case "leaderboard":
+    case "scoreboard":
+      await replyTo(d, msg, await scoreboard("week", today(d).date, d));
+      return;
+    case "monthly_walks":
+    case "monthly":
+      await replyTo(d, msg, await scoreboard("month", today(d).date, d));
+      return;
     case "status":
     case "today":
       await replyTo(d, msg, await statusText(d));
@@ -333,8 +357,29 @@ async function conditionHolds(slot: Slot, date: string, d: Deps): Promise<boolea
   return true;
 }
 
+// ---------- scoreboards ----------
+
+async function scoreboardEntries(period: Period, date: string, d: Deps) {
+  const range = periodRange(date, period);
+  return { range, entries: tally(await d.store.walksBetween(range.start, range.end)) };
+}
+
+export async function scoreboard(period: Period, date: string, d: Deps): Promise<string> {
+  const { range, entries } = await scoreboardEntries(period, date, d);
+  return scoreboardText(d.config.dogName, period, range.label, entries);
+}
+
+/** Scheduled weekly/monthly post: the scoreboard, then a separate thank-you to the top walker(s). */
+async function postScoreboard(period: "week" | "month", date: string, d: Deps) {
+  const { range, entries } = await scoreboardEntries(period, date, d);
+  await announce(d, scoreboardText(d.config.dogName, period, range.label, entries));
+  if (entries.length) await announce(d, thanksText(period, topWalkers(entries), date, d.random));
+}
+
 /** Send one slot's message right now. */
 export async function fireSlot(slot: Slot, date: string, d: Deps): Promise<void> {
+  if (slot.kind === "weekly_scoreboard") return postScoreboard("week", date, d);
+  if (slot.kind === "monthly_scoreboard") return postScoreboard("month", date, d);
   if (slot.kind !== "walk") {
     await announce(d, otherMessage(slot.kind, d.random));
     return;
@@ -359,10 +404,13 @@ export async function fireSlot(slot: Slot, date: string, d: Deps): Promise<void>
 /** Called by the cron every 15 minutes. */
 export async function runTick(d: Deps): Promise<string[]> {
   const clock = today(d);
-  if (!d.config.activeDays.includes(clock.weekday)) return [];
+  const activeDay = d.config.activeDays.includes(clock.weekday);
 
   const fired: string[] = [];
   for (const slot of dueSlots(clock.hour, clock.minute, SCHEDULE)) {
+    if (!runsOn(slot, clock.date, clock.weekday)) continue;
+    // ACTIVE_DAYS limits the daily reminders; scoreboards always go out.
+    if (!activeDay && !isScoreboard(slot)) continue;
     if (!(await conditionHolds(slot, clock.date, d))) continue;
     if (!(await d.store.claimSlot(clock.date, slot.id, d.now().toISOString()))) continue;
     try {
